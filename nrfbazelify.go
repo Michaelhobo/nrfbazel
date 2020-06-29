@@ -31,9 +31,9 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 		return errors.New("sdk must be an absolute path")
 	}
 	if !strings.HasPrefix(sdkDir, workspaceDir) {
-		return fmt.Errorf("sdk_dir is not inside workspace_dir:\nsdk_dir=%s\nworkspace_dir=%s", sdkAbs, workspaceAbs)
+		return fmt.Errorf("sdk_dir is not inside workspace_dir:\nsdk_dir=%s\nworkspace_dir=%s", sdkDir, workspaceDir)
 	}
-	log.Printf("Generating BUILD files for %s", sdkAbs)
+	log.Printf("Generating BUILD files for %s", sdkDir)
 	gen := &buildGen{
 		workspaceDir: filepath.Clean(workspaceDir),
 		sdkDir: filepath.Clean(sdkDir),
@@ -50,7 +50,7 @@ type buildGen struct {
 }
 
 func (b *buildGen) generate() error {
-	if err := filepath.Walk(b.sdkDir, b.walkFunc); err != nil {
+	if err := filepath.Walk(b.sdkDir, b.buildTargetsMap); err != nil {
 		return fmt.Errorf("filepath.Walk(%s): %v", b.sdkDir, err)
 	}
 	if err := b.resolveTargets(); err != nil {
@@ -74,9 +74,9 @@ func (b *buildGen) resolveTargets() error {
 		for _, target := range config.possible {
 			var deps []string
 			for _, include := range target.includes {
-				deps = append(deps, b.targetFromInclude(include))
+				deps = append(deps, b.targetFromInclude(include, target.dir))
 			}
-			if err := buildfile.WriteLibrary(&buildfile.LibraryInfo{
+			if err := buildfile.WriteLibrary(&buildfile.Library{
 				Dir: target.dir,
 				Name: strings.TrimSuffix(target.hdrs[0], ".h"),
 				Srcs: target.srcs,
@@ -91,7 +91,7 @@ func (b *buildGen) resolveTargets() error {
 	return nil
 }
 
-func (b *buildGen) targetFromInclude(include string) string {
+func (b *buildGen) targetFromInclude(include, ownDir string) string {
 	info := b.targets[include]
 	if info == nil {
 		// This should never happen since we do pre-processing. Just crash if it occurs.
@@ -105,20 +105,41 @@ func (b *buildGen) targetFromInclude(include string) string {
 		log.Fatalf("len(b.targets[%s].possible)=%d, want %d", include, got, want)
 	}
 
-	dir := strings.TrimPrefix(info.possible[0].dir, b.workspaceDir)
-	return fmt.Sprintf("/%s:%s", dir, strings.TrimSuffix(info.possible[0].hdrs[0], ".h"))
+	prefix := ""
+	suffix := ""
+
+	// Only populate the prefix with the directory if target is in a different directory.
+	if info.possible[0].dir != ownDir {
+		prefix = fmt.Sprintf("/%s", strings.TrimPrefix(info.possible[0].dir, b.workspaceDir))
+	}
+
+	// If the target has a prefix of "//a/dir", and the target name is "dir",
+	// we can shorten "//a/dir:dir" to just "//a/dir"
+	targetName := strings.TrimSuffix(info.possible[0].hdrs[0], ".h")
+	targetDirName := filepath.Base(strings.TrimPrefix(prefix, "//"))
+	if targetDirName != targetName {
+		suffix = fmt.Sprintf(":%s", targetName)
+	}
+
+	return fmt.Sprintf("%s%s", prefix, suffix)
 }
 
-// walkFunc walks the nrf52 SDK tree and generates BUILD files
-func (b *buildGen) walkFunc(path string, info os.FileInfo, err error) error {
-	log.Printf("walkFunc: %s", path)
+// buildTargetsMap walks the nrf52 SDK tree, reads all source files,
+// and builds the b.targets map.
+func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) error {
 	if err != nil {
-		log.Printf("%s: %v", path, err)
+		log.Printf("%s: %v", b.prettySDKPath(path), err)
 		return nil
 	}
 	// Walk through the dir
 	if info.IsDir() {
 		return nil
+	}
+	// Remove all BUILD files
+	if info.Name() == "BUILD" {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("os.Remove(%s): %v", b.prettySDKPath(path), err)
+		}
 	}
 	if filepath.Ext(path) != ".h" {
 		return nil
@@ -126,9 +147,9 @@ func (b *buildGen) walkFunc(path string, info os.FileInfo, err error) error {
 	shortName := strings.TrimSuffix(info.Name(), ".h")
 	dirName := filepath.Dir(path)
 	
-	hIncludes, err := readIncludes(path)
+	hIncludes, err := b.readIncludes(path, info.Name())
 	if err != nil {
-		log.Printf("readIncludes(%s): %v", path, err)
+		log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
 		return nil
 	}
 	b.populateIncludesInTargets(hIncludes)
@@ -148,10 +169,10 @@ func (b *buildGen) walkFunc(path string, info os.FileInfo, err error) error {
 	
 	// TODO: expand to different types of implementation files.
 	cFileName := fmt.Sprintf("%s.c", shortName)
-	cIncludes, err := readIncludes(filepath.Join(dirName, cFileName))
+	cIncludes, err := b.readIncludes(filepath.Join(dirName, cFileName), info.Name())
 	if err != nil {
 		// TODO: hide this one behind a verbose flag
-		log.Printf("readIncludes(%s): %v", path, err)
+		log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
 		return nil
 	}
 	b.populateIncludesInTargets(cIncludes)
@@ -171,11 +192,15 @@ func (b *buildGen) populateIncludesInTargets(includes []string) {
 	}
 }
 
+func (b *buildGen) prettySDKPath(path string) string {
+	return "<SDK>" + strings.TrimPrefix(path, b.sdkDir)
+}
+
 // readIncludes reads all the #include lines from 
-func readIncludes(path string) ([]string, error) {
+func (b *buildGen) readIncludes(path string, exclude string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", path, err)
+		return nil, err
 	}
 	defer file.Close()
 
@@ -186,8 +211,11 @@ func readIncludes(path string) ([]string, error) {
 		matches := includeMatcher.FindStringSubmatch(line)
 		if len(matches) != 2 {
 			if matches != nil {
-				log.Printf("Reading includes from %s: len(%v) != 2", path, matches)
+				log.Printf("Reading includes from %s: len(%v) != 2", b.prettySDKPath(path), matches)
 			}
+			continue
+		}
+		if matches[1] == exclude {
 			continue
 		}
 		out = append(out, matches[1])
@@ -206,5 +234,5 @@ type targetsConfig struct {
 	possible []*targetInfo
 }
 func generateResolutionHint(unresolved map[string][]*targetInfo) string {
-	return "TODO: Add resolution hint"
+	return fmt.Sprintf("Unresolved: %v, TODO: Add resolution hint", unresolved)
 }
