@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,10 +12,14 @@ import (
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/buildfile"
+	rcpb "github.com/Michaelhobo/nrfbazel/nrfbazelify/bazelifyrc"
+	"github.com/golang/protobuf/proto"
 )
 
 const (
 	sdkConfigName = "sdk_config.h"
+	// We read this file from the root of the SDK.
+	rcFilename = ".bazelifyrc"
 )
 
 var (
@@ -36,8 +41,8 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 	log.Printf("Generating BUILD files for %s", sdkDir)
 	gen := &buildGen{
 		workspaceDir: filepath.Clean(workspaceDir),
-		sdkDir: filepath.Clean(sdkDir),
-		targets: make(map[string]*targetsConfig),
+		sdkDir:       filepath.Clean(sdkDir),
+		targets:      make(map[string]*targetsConfig),
 	}
 	return gen.generate()
 }
@@ -46,10 +51,13 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 type buildGen struct {
 	// These are pre-cleaned by GenerateBuildFiles
 	workspaceDir, sdkDir string
-	targets map[string]*targetsConfig // include name -> target config
+	targets              map[string]*targetsConfig // include name -> target config
 }
 
 func (b *buildGen) generate() error {
+	if err := b.loadBazelifyRC(); err != nil {
+		log.Printf("Not loading .bazelifyrc: %v", err)
+	}
 	if err := filepath.Walk(b.sdkDir, b.buildTargetsMap); err != nil {
 		return fmt.Errorf("filepath.Walk(%s): %v", b.sdkDir, err)
 	}
@@ -59,9 +67,37 @@ func (b *buildGen) generate() error {
 	return nil
 }
 
+func (b *buildGen) loadBazelifyRC() error {
+	// We read this file from the root of the SDK, so that we can have
+	// per-SDK overrides in the same workspace.
+	rcPath := filepath.Join(b.sdkDir, rcFilename)
+	rcData, err := ioutil.ReadFile(rcPath)
+	if err != nil {
+		return fmt.Errorf("Could not read %s: %v", rcFilename, err)
+	}
+	var rc rcpb.Configuration
+	if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
+		return err
+	}
+	// No overrides? Exit early.
+	if rc.TargetOverrides == nil {
+		return nil
+	}
+	for name, override := range rc.TargetOverrides {
+		if b.targets[name] != nil {
+			return fmt.Errorf("duplicate target override for %q in %s", name, rcFilename)
+		}
+		b.targets[name] = &targetsConfig{
+			override: override,
+		}
+	}
+	return nil
+}
+
 func (b *buildGen) resolveTargets() error {
 	unresolved := make(map[string][]*targetInfo) // maps name -> possible targets
 	for name, config := range b.targets {
+
 		if config.override == "" && len(config.possible) != 1 {
 			unresolved[name] = config.possible
 		}
@@ -77,11 +113,11 @@ func (b *buildGen) resolveTargets() error {
 				deps = append(deps, b.targetFromInclude(include, target.dir))
 			}
 			if err := buildfile.WriteLibrary(&buildfile.Library{
-				Dir: target.dir,
-				Name: strings.TrimSuffix(target.hdrs[0], ".h"),
-				Srcs: target.srcs,
-				Hdrs: target.hdrs,
-				Deps: deps,
+				Dir:      target.dir,
+				Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
+				Srcs:     target.srcs,
+				Hdrs:     target.hdrs,
+				Deps:     deps,
 				Includes: []string{"."},
 			}); err != nil {
 				return err
@@ -146,7 +182,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 	}
 	shortName := strings.TrimSuffix(info.Name(), ".h")
 	dirName := filepath.Dir(path)
-	
+
 	hIncludes, err := b.readIncludes(path, info.Name())
 	if err != nil {
 		log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
@@ -155,8 +191,8 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 	b.populateIncludesInTargets(hIncludes)
 
 	target := &targetInfo{
-		dir: dirName,
-		hdrs: []string{info.Name()},
+		dir:      dirName,
+		hdrs:     []string{info.Name()},
 		includes: hIncludes,
 	}
 
@@ -166,7 +202,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		}
 		b.targets[info.Name()].possible = append(b.targets[info.Name()].possible, target)
 	}()
-	
+
 	// TODO: expand to different types of implementation files.
 	cFileName := fmt.Sprintf("%s.c", shortName)
 	cIncludes, err := b.readIncludes(filepath.Join(dirName, cFileName), info.Name())
@@ -196,7 +232,7 @@ func (b *buildGen) prettySDKPath(path string) string {
 	return "<SDK>" + strings.TrimPrefix(path, b.sdkDir)
 }
 
-// readIncludes reads all the #include lines from 
+// readIncludes reads all the #include lines from
 func (b *buildGen) readIncludes(path string, exclude string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -224,15 +260,16 @@ func (b *buildGen) readIncludes(path string, exclude string) ([]string, error) {
 }
 
 type targetInfo struct {
-	dir string
+	dir        string
 	hdrs, srcs []string
-	includes []string
+	includes   []string
 }
 
 type targetsConfig struct {
 	override string
 	possible []*targetInfo
 }
+
 func generateResolutionHint(unresolved map[string][]*targetInfo) string {
 	return fmt.Sprintf("Unresolved: %v, TODO: Add resolution hint", unresolved)
 }

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package bazelifyrc;
+
+option go_package = "github.com/Michaelhobo/nrfbazel/nrfbazelify/bazelifyrc";
+
+// Configuration configures the behavior of the nrf52bazelify tool.
+message Configuration {
+  // Maps target name to a Bazel label override. e.g. we can set an override for
+  // a.h=//c/b:a
+  map<string, string> target_overrides = 1;
+}

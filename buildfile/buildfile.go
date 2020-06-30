@@ -12,10 +12,10 @@ type Library struct {
 	// directory where the BUILD file is written
 	Dir string
 	// name of the library rule
-	Name string
-	Srcs []string
-	Hdrs []string
-	Deps []string
+	Name     string
+	Srcs     []string
+	Hdrs     []string
+	Deps     []string
 	Includes []string
 }
 
