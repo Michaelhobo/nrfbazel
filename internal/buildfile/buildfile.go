@@ -2,7 +2,6 @@ package buildfile
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 )
@@ -12,10 +11,10 @@ type Library struct {
 	// directory where the BUILD file is written
 	Dir string
 	// name of the library rule
-	Name string
-	Srcs []string
-	Hdrs []string
-	Deps []string
+	Name     string
+	Srcs     []string
+	Hdrs     []string
+	Deps     []string
 	Includes []string
 }
 
@@ -35,14 +34,13 @@ func GenerateLibrary(lib *Library) (path, contents string) {
 	if lib.Deps != nil {
 		contents += fmt.Sprintf(", deps = %s", bazelStringList(lib.Deps))
 	}
-	contents += ")"
+	contents += ")\n"
 	return
 }
 
 // WriteLibrary writes the contents of the cc_library rule to file.
 func WriteLibrary(lib *Library) error {
 	path, contents := GenerateLibrary(lib)
-	log.Printf("Writing to %s:\n%s", path, contents)
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err

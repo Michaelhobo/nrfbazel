@@ -9,7 +9,7 @@ import (
 
 var (
 	workspaceDir = flag.String("workspace", "", "The Bazel WORKSPACE directory. Absolute path required.")
-	sdkDir = flag.String("sdk", "", "The path to the nrf52 SDK's root directory. Absolute path required.")
+	sdkDir       = flag.String("sdk", "", "The path to the nrf52 SDK's root directory. Absolute path required.")
 )
 
 func main() {

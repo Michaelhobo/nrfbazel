@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Michaelhobo/nrfbazel/buildfile"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 )
 
-var testDataDir = "testdata/nrfbazelify"
+var testDataDir = "testdata"
+
 const garbageText = "garbage to remove"
 
 func mustMakeAbs(t *testing.T, dir string) string {
@@ -39,9 +40,12 @@ func removeAllBuildFiles(t *testing.T, dir string) {
 	}
 }
 
+// Checks that BUILD library rules exist. It does not check that libs is the total set of library rules in existence.
+// For example, if you have a BUILD file with buildfile.Library rules named "a" "b" "c",
+// checkBuildFiles(Library{Name: "a"}) would pass since a library rule for "a" exists.
 func checkBuildFiles(t *testing.T, libs ...*buildfile.Library) {
 	t.Helper()
-	gotContents := make(map[string]string) // path -> contents written to file
+	gotContents := make(map[string]string)    // path -> contents written to file
 	wantContents := make(map[string][]string) // path -> desired contents substrings
 
 	// Generate the content we want and the content we expect from the list of libraries.
@@ -65,7 +69,7 @@ func checkBuildFiles(t *testing.T, libs ...*buildfile.Library) {
 	for path, wantContentsList := range wantContents {
 		for _, wantContents := range wantContentsList {
 			if got, want := strings.Count(gotContents[path], wantContents), 1; got != want {
-				t.Errorf("%s contains %d copies of the content, want %d\n  got (full file):  %s\n  want (substring): %s", path, got, want, gotContents[path], wantContents)
+				t.Errorf("%s contains %d copies of the content, want %d\n  got (full file):\n%s\n  want (substring):\n%s", path, got, want, gotContents[path], wantContents)
 			}
 		}
 	}
@@ -81,25 +85,23 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
-		Dir: sdkDir,
-		Name: "a",
-		Hdrs: []string{"a.h"},
-		Deps: []string{":b"},
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Deps:     []string{":b"},
 		Includes: []string{"."},
-	},
-	&buildfile.Library{
-		Dir: sdkDir,
-		Name: "b",
-		Srcs: []string{"b.c"},
-		Hdrs: []string{"b.h"},
-		Deps: []string{"//nominal/dir:c"},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "b",
+		Srcs:     []string{"b.c"},
+		Hdrs:     []string{"b.h"},
+		Deps:     []string{"//nominal/dir:c"},
 		Includes: []string{"."},
-	},
-	&buildfile.Library{
-		Dir: filepath.Join(sdkDir, "dir"),
-		Name: "c",
-		Srcs: []string{"c.c"},
-		Hdrs: []string{"c.h"},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "dir"),
+		Name:     "c",
+		Srcs:     []string{"c.c"},
+		Hdrs:     []string{"c.h"},
 		Includes: []string{"."},
 	})
 }
@@ -114,16 +116,15 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
-		Dir: sdkDir,
-		Name: "uses_dir",
-		Hdrs: []string{"uses_dir.h"},
-		Deps: []string{"//name_matches_dir/dir"},
+		Dir:      sdkDir,
+		Name:     "uses_dir",
+		Hdrs:     []string{"uses_dir.h"},
+		Deps:     []string{"//name_matches_dir/dir"},
 		Includes: []string{"."},
-	},
-	&buildfile.Library{
-		Dir: filepath.Join(sdkDir, "dir"),
-		Name: "dir",
-		Hdrs: []string{"dir.h"},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "dir"),
+		Name:     "dir",
+		Hdrs:     []string{"dir.h"},
 		Includes: []string{"."},
 	})
 }
@@ -142,9 +143,9 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
-		Dir: sdkDir,
-		Name: "a",
-		Hdrs: []string{"a.h"},
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 	})
 	buildPath := filepath.Join(sdkDir, "BUILD")
@@ -166,21 +167,19 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, workspaceAndSDKDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
-		Dir: workspaceAndSDKDir,
-		Name: "a",
-		Hdrs: []string{"a.h"},
-		Deps: []string{":workspace_matches_sdk_dir"},
+		Dir:      workspaceAndSDKDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Deps:     []string{":workspace_matches_sdk_dir"},
 		Includes: []string{"."},
-	},
-	&buildfile.Library{
-		Dir: workspaceAndSDKDir,
-		Name: "workspace_matches_sdk_dir",
-		Srcs: []string{"workspace_matches_sdk_dir.c"},
-		Hdrs: []string{"workspace_matches_sdk_dir.h"},
+	}, &buildfile.Library{
+		Dir:      workspaceAndSDKDir,
+		Name:     "workspace_matches_sdk_dir",
+		Srcs:     []string{"workspace_matches_sdk_dir.c"},
+		Hdrs:     []string{"workspace_matches_sdk_dir.h"},
 		Includes: []string{"."},
 	})
 }
-
 
 func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
@@ -188,4 +187,87 @@ func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
 	if err := GenerateBuildFiles(workspaceDir, sdkDir); err == nil {
 		t.Errorf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
 	}
+}
+
+func TestGenerateBuildFiles_BazelifyRCExists(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_exists", "sdkdir")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+		Deps: []string{
+			"//bazelifyrc_exists/sdkdir/b",
+			"//bazelifyrc_exists/sdkdir/c",
+			"//bazelifyrc_exists/outsidesdkdir:d",
+		},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "b"),
+		Name:     "b",
+		Hdrs:     []string{"b.h"},
+		Includes: []string{"."},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "c",
+		Hdrs:     []string{"c.h"},
+		Includes: []string{"."},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "c"),
+		Name:     "c",
+		Hdrs:     []string{"c.h"},
+		Includes: []string{"."},
+	},
+	)
+}
+
+func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_exists_but_empty")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+	})
+}
+
+func TestGenerateBuildFiles_CommentedInclude(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "strange_includes")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+		Deps:     []string{":b", ":d"},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "b",
+		Hdrs:     []string{"b.h"},
+		Includes: []string{"."},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "d",
+		Hdrs:     []string{"d.h"},
+		Includes: []string{"."},
+	})
 }
