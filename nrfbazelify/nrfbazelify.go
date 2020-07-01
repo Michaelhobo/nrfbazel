@@ -11,9 +11,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Michaelhobo/nrfbazel/buildfile"
-	rcpb "github.com/Michaelhobo/nrfbazel/nrfbazelify/bazelifyrc"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/golang/protobuf/proto"
+
+	"github.com/Michaelhobo/nrfbazel/bazelifyrc"
 )
 
 const (
@@ -22,11 +23,9 @@ const (
 	rcFilename = ".bazelifyrc"
 )
 
-var (
-	includeMatcher = regexp.MustCompile("#include\\s+\"(.+)\"")
-)
+var includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 
-// NewBuildGenerator creates a new BUILD file generator that reads from sdkDir
+// GenerateBuildFiles generates BUILD files for all C source files in sdkDir
 // and marks all includes starting from workspaceDir.
 func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 	if !filepath.IsAbs(workspaceDir) {
@@ -75,7 +74,7 @@ func (b *buildGen) loadBazelifyRC() error {
 	if err != nil {
 		return fmt.Errorf("Could not read %s: %v", rcFilename, err)
 	}
-	var rc rcpb.Configuration
+	var rc bazelifyrc.Configuration
 	if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
 		return err
 	}
