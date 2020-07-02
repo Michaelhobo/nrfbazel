@@ -9,4 +9,11 @@ message Configuration {
   // Maps target name to a Bazel label override. e.g. we can set an override for
   // a.h=//c/b:a
   map<string, string> target_overrides = 1;
+  // Specify paths relative to the SDK root that should be excluded.
+  // Shell file name patterns are allowed, based on
+  // https://golang.org/pkg/path/filepath/#Match. Excluded paths will not get
+  // BUILD files generated for them, and will not be used for resolving
+  // dependencies. This is useful for excluding things like the examples
+  // directory.
+  repeated string excludes = 2;
 }
