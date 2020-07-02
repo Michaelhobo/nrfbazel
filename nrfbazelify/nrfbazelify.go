@@ -51,6 +51,7 @@ type buildGen struct {
 	// These are pre-cleaned by GenerateBuildFiles
 	workspaceDir, sdkDir string
 	targets              map[string]*targetsConfig // include name -> target config
+	excludes             []string
 }
 
 func (b *buildGen) generate() error {
@@ -78,10 +79,6 @@ func (b *buildGen) loadBazelifyRC() error {
 	if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
 		return err
 	}
-	// No overrides? Exit early.
-	if rc.TargetOverrides == nil {
-		return nil
-	}
 	for name, override := range rc.TargetOverrides {
 		if b.targets[name] != nil {
 			return fmt.Errorf("duplicate target override for %q in %s", name, rcFilename)
@@ -90,6 +87,7 @@ func (b *buildGen) loadBazelifyRC() error {
 			override: override,
 		}
 	}
+	b.excludes = rc.GetExcludes()
 	return nil
 }
 
@@ -165,6 +163,23 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 	if err != nil {
 		log.Printf("%s: %v", b.prettySDKPath(path), err)
 		return nil
+	}
+	relPath, err := filepath.Rel(b.sdkDir, path)
+	if err != nil {
+		return err
+	}
+	// Check to see if path is excluded.
+	for _, exclude := range b.excludes {
+		matched, err := filepath.Match(exclude, relPath)
+		if err != nil {
+			return err
+		}
+		if matched && info.IsDir() {
+			return filepath.SkipDir
+		}
+		if matched {
+			return nil
+		}
 	}
 	// Walk through the dir
 	if info.IsDir() {

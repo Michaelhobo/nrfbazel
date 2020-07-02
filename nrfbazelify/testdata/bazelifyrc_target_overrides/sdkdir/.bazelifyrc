@@ -1,0 +1,8 @@
+target_overrides {
+  key: "c.h"
+  value: "//bazelifyrc_target_overrides/sdkdir/c"
+}
+target_overrides {
+  key: "d.h"
+  value: "//bazelifyrc_target_overrides/outsidesdkdir:d"
+}

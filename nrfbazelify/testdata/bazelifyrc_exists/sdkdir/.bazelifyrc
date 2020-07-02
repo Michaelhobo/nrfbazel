@@ -1,8 +1,0 @@
-target_overrides {
-  key: "c.h"
-  value: "//bazelifyrc_exists/sdkdir/c"
-}
-target_overrides {
-  key: "d.h"
-  value: "//bazelifyrc_exists/outsidesdkdir:d"
-}

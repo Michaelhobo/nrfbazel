@@ -1,0 +1,2 @@
+excludes: "excluded"
+excludes: "included/star_excluded/*"

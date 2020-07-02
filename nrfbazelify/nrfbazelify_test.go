@@ -189,9 +189,9 @@ func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
 	}
 }
 
-func TestGenerateBuildFiles_BazelifyRCExists(t *testing.T) {
+func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
-	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_exists", "sdkdir")
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_target_overrides", "sdkdir")
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
@@ -204,9 +204,9 @@ func TestGenerateBuildFiles_BazelifyRCExists(t *testing.T) {
 		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 		Deps: []string{
-			"//bazelifyrc_exists/sdkdir/b",
-			"//bazelifyrc_exists/sdkdir/c",
-			"//bazelifyrc_exists/outsidesdkdir:d",
+			"//bazelifyrc_target_overrides/sdkdir/b",
+			"//bazelifyrc_target_overrides/sdkdir/c",
+			"//bazelifyrc_target_overrides/outsidesdkdir:d",
 		},
 	}, &buildfile.Library{
 		Dir:      filepath.Join(sdkDir, "b"),
@@ -244,7 +244,7 @@ func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
 	})
 }
 
-func TestGenerateBuildFiles_CommentedInclude(t *testing.T) {
+func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
 	sdkDir := filepath.Join(workspaceDir, "strange_includes")
 	t.Cleanup(func() {
@@ -270,4 +270,53 @@ func TestGenerateBuildFiles_CommentedInclude(t *testing.T) {
 		Hdrs:     []string{"d.h"},
 		Includes: []string{"."},
 	})
+}
+
+func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_excludes")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+		Deps: []string{
+			"//bazelifyrc_excludes/included:d",
+			"//bazelifyrc_excludes/included/e",
+		},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "b",
+		Hdrs:     []string{"b.h"},
+		Includes: []string{"."},
+		Deps:     []string{":a"},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "included"),
+		Name:     "d",
+		Hdrs:     []string{"d.h"},
+		Includes: []string{"."},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "included", "e"),
+		Name:     "e",
+		Hdrs:     []string{"e.h"},
+		Includes: []string{"."},
+	})
+	// Make sure BUILD files aren't created for excluded directories
+	buildShouldNotExist := []string{
+		"excluded",
+		"included/star_excluded",
+		"included/star_excluded/e",
+	}
+	for _, dir := range buildShouldNotExist {
+		path := filepath.Join(sdkDir, dir, "BUILD")
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("BUILD file in %s created, but should not have been created", dir)
+		}
+	}
 }
