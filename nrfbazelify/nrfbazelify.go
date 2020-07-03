@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	sdkConfigName = "sdk_config.h"
 	// We read this file from the root of the SDK.
 	rcFilename = ".bazelifyrc"
 )
@@ -41,7 +40,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 	gen := &buildGen{
 		workspaceDir: filepath.Clean(workspaceDir),
 		sdkDir:       filepath.Clean(sdkDir),
-		targets:      make(map[string]*targetsConfig),
+		targets:      make(map[string]*possibleTargets),
 	}
 	return gen.generate()
 }
@@ -50,8 +49,8 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 type buildGen struct {
 	// These are pre-cleaned by GenerateBuildFiles
 	workspaceDir, sdkDir string
-	targets              map[string]*targetsConfig // include name -> target config
-	excludes             []string
+	targets              map[string]*possibleTargets // include name -> all possible targets
+	rc                   *bazelifyrc.Configuration
 }
 
 func (b *buildGen) generate() error {
@@ -79,28 +78,27 @@ func (b *buildGen) loadBazelifyRC() error {
 	if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
 		return err
 	}
-	for name, override := range rc.TargetOverrides {
+	b.rc = &rc
+	for name, override := range rc.GetTargetOverrides() {
 		if b.targets[name] != nil {
 			return fmt.Errorf("duplicate target override for %q in %s", name, rcFilename)
 		}
-		b.targets[name] = &targetsConfig{
+		b.targets[name] = &possibleTargets{
 			override: override,
 		}
 	}
-	b.excludes = rc.GetExcludes()
 	return nil
 }
 
 func (b *buildGen) resolveTargets() error {
-	unresolved := make(map[string][]*targetInfo) // maps name -> possible targets
-	for name, config := range b.targets {
-
-		if config.override == "" && len(config.possible) != 1 {
-			unresolved[name] = config.possible
+	unresolved := make(map[string]*possibleTargets) // maps name -> possible targets
+	for name, possibleTargets := range b.targets {
+		if possibleTargets.override == "" && len(possibleTargets.possible) != 1 {
+			unresolved[name] = possibleTargets
 		}
 	}
 	if len(unresolved) > 0 {
-		return errors.New(generateResolutionHint(unresolved))
+		return errors.New(b.generateResolutionHint(unresolved))
 	}
 	// Loop through each target, and call buildfile.WriteLibrary()
 	for _, config := range b.targets {
@@ -125,36 +123,48 @@ func (b *buildGen) resolveTargets() error {
 }
 
 func (b *buildGen) targetFromInclude(include, ownDir string) string {
-	info := b.targets[include]
-	if info == nil {
+	possibleTargets := b.targets[include]
+	if possibleTargets == nil {
 		// This should never happen since we do pre-processing. Just crash if it occurs.
 		log.Fatalf("b.targets[%s] is nil", include)
 	}
-	if info.override != "" {
-		return info.override
+	if possibleTargets.override != "" {
+		return possibleTargets.override
 	}
-	if got, want := len(info.possible), 1; got != want {
+	if got, want := len(possibleTargets.possible), 1; got != want {
 		// This should never happen since we do pre-processing. Just crash if it occurs.
 		log.Fatalf("len(b.targets[%s].possible)=%d, want %d", include, got, want)
 	}
+	return b.formatTarget(possibleTargets, ownDir)
+}
 
-	prefix := ""
-	suffix := ""
+// formatInclude formats the Bazel target.
+// If possibleTargets does not have an override or does not have exactly 1 possible target,
+// we will print a PLEASE RESOLVE in the output.
+func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string) string {
 
-	// Only populate the prefix with the directory if target is in a different directory.
-	if info.possible[0].dir != ownDir {
-		prefix = fmt.Sprintf("/%s", strings.TrimPrefix(info.possible[0].dir, b.workspaceDir))
+	var formatted []string
+	for _, possible := range possibleTargets.possible {
+		prefix := ""
+		suffix := ""
+		if possible.dir != ownDir {
+			prefix = fmt.Sprintf("/%s", strings.TrimPrefix(possible.dir, b.workspaceDir))
+		}
+
+		// If the target has a prefix of "//a/dir", and the target name is "dir",
+		// we can shorten "//a/dir:dir" to just "//a/dir"
+		targetName := strings.TrimSuffix(possible.hdrs[0], ".h")
+		targetDirName := filepath.Base(strings.TrimPrefix(prefix, "//"))
+		if targetDirName != targetName {
+			suffix = fmt.Sprintf(":%s", targetName)
+		}
+		// Only populate the prefix with the directory if target is in a different directory.
+		formatted = append(formatted, fmt.Sprintf("%s%s", prefix, suffix))
 	}
-
-	// If the target has a prefix of "//a/dir", and the target name is "dir",
-	// we can shorten "//a/dir:dir" to just "//a/dir"
-	targetName := strings.TrimSuffix(info.possible[0].hdrs[0], ".h")
-	targetDirName := filepath.Base(strings.TrimPrefix(prefix, "//"))
-	if targetDirName != targetName {
-		suffix = fmt.Sprintf(":%s", targetName)
+	if len(formatted) == 1 {
+		return formatted[0]
 	}
-
-	return fmt.Sprintf("%s%s", prefix, suffix)
+	return fmt.Sprintf("PLEASE RESOLVE: %s", strings.Join(formatted, "|"))
 }
 
 // buildTargetsMap walks the nrf52 SDK tree, reads all source files,
@@ -169,7 +179,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		return err
 	}
 	// Check to see if path is excluded.
-	for _, exclude := range b.excludes {
+	for _, exclude := range b.rc.GetExcludes() {
 		matched, err := filepath.Match(exclude, relPath)
 		if err != nil {
 			return err
@@ -212,7 +222,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 
 	defer func() {
 		if b.targets[info.Name()] == nil {
-			b.targets[info.Name()] = &targetsConfig{}
+			b.targets[info.Name()] = &possibleTargets{}
 		}
 		b.targets[info.Name()].possible = append(b.targets[info.Name()].possible, target)
 	}()
@@ -237,7 +247,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 func (b *buildGen) populateIncludesInTargets(includes []string) {
 	for _, include := range includes {
 		if b.targets[include] == nil {
-			b.targets[include] = &targetsConfig{}
+			b.targets[include] = &possibleTargets{}
 		}
 	}
 }
@@ -279,11 +289,23 @@ type targetInfo struct {
 	includes   []string
 }
 
-type targetsConfig struct {
+type possibleTargets struct {
 	override string
 	possible []*targetInfo
 }
 
-func generateResolutionHint(unresolved map[string][]*targetInfo) string {
-	return fmt.Sprintf("Unresolved: %v, TODO: Add resolution hint", unresolved)
+func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets) string {
+	rc := proto.Clone(b.rc).(*bazelifyrc.Configuration)
+	if rc == nil {
+		rc = &bazelifyrc.Configuration{}
+	}
+	if rc.GetTargetOverrides() == nil {
+		rc.TargetOverrides = make(map[string]string)
+	}
+	for name, possible := range unresolved {
+		rc.GetTargetOverrides()[name] = b.formatTarget(possible, "")
+	}
+	rcText := proto.MarshalTextString(rc)
+	rcPath := filepath.Join(b.sdkDir, rcFilename)
+	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again:\n\n%s", rcPath, rcText)
 }
