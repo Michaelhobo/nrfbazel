@@ -1,6 +1,7 @@
 # nrfbazel
 
-This contains a collection of tools used for working with the nrf52 SDK with Bazel.
+This contains a collection of tools used for working with the nrf52 SDK with 
+(Bazel)[https://bazel.build].
 
 ## nrfbazelify
 
