@@ -11,6 +11,7 @@ import (
 var (
 	workspaceDir = flag.String("workspace", "", "The Bazel WORKSPACE directory. Absolute path required.")
 	sdkDir       = flag.String("sdk", "", "The path to the nrf52 SDK's root directory. Absolute path required.")
+	verbose = flag.Bool("verbose", false, "Show verbose logs")
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 		log.Print(`
 nrfbazelify converts an nrf5 SDK to Bazel (https://bazel.build).
 
-Usage: nrfbazelify --workspace=<absolute dir> --sdk=<absolute dir>
+Usage: nrfbazelify --workspace=<absolute dir> --sdk=<absolute dir> [--verbose]
 
 WARNING: nrfbazelify will delete all existing BUILD files in the directory
 specified by --sdk
@@ -43,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 	log.Printf("Generating BUILD files for %s", *sdkDir)
-	if err := nrfbazelify.GenerateBuildFiles(*workspaceDir, *sdkDir); err != nil {
+	if err := nrfbazelify.GenerateBuildFiles(*workspaceDir, *sdkDir, *verbose); err != nil {
 		log.Fatalf("Failed to generate BUILD files: %v", err)
 	}
 	log.Printf("Successfully generated BUILD files for %s", *sdkDir)

@@ -81,7 +81,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -112,7 +112,7 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -139,7 +139,7 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -163,7 +163,7 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, workspaceAndSDKDir)
 	})
-	if err := GenerateBuildFiles(workspaceAndSDKDir, workspaceAndSDKDir); err != nil {
+	if err := GenerateBuildFiles(workspaceAndSDKDir, workspaceAndSDKDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, workspaceAndSDKDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -184,7 +184,7 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
 	sdkDir := filepath.Join(workspaceDir, "include_does_not_exist")
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err == nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
 		t.Errorf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
 	}
 }
@@ -195,7 +195,7 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -233,7 +233,7 @@ func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -250,7 +250,7 @@ func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -278,7 +278,7 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -327,7 +327,7 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 	t.Cleanup(func() {
 		removeAllBuildFiles(t, sdkDir)
 	})
-	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
 		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
 	}
 	checkBuildFiles(t, &buildfile.Library{
@@ -336,5 +336,4 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 	})
-
 }
