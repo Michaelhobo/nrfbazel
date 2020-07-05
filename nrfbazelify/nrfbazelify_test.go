@@ -320,3 +320,21 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_ignore_headers")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+	})
+
+}

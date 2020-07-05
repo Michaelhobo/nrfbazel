@@ -16,4 +16,7 @@ message Configuration {
   // dependencies. This is useful for excluding things like the examples
   // directory.
   repeated string excludes = 2;
+  // Ignore all of these header files, because they don't need an explicit
+  // dependency. This is used to ignore c stdlib headers, e.g. string.h.
+  repeated string ignore_headers = 3;
 }
