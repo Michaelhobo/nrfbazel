@@ -278,9 +278,21 @@ func (b *buildGen) readIncludes(path string, exclude string) ([]string, error) {
 		if matches[1] == exclude {
 			continue
 		}
+		if b.shouldIgnore(matches[1]) {
+			continue
+		}
 		out = append(out, matches[1])
 	}
 	return out, nil
+}
+
+func (b *buildGen) shouldIgnore(header string) bool {
+	for _, ignore := range b.rc.GetIgnoreHeaders() {
+		if header == ignore {
+			return true
+		}
+	}
+	return false
 }
 
 type targetInfo struct {
