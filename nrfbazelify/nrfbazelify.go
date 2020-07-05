@@ -26,7 +26,7 @@ var includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 
 // GenerateBuildFiles generates BUILD files for all C source files in sdkDir
 // and marks all includes starting from workspaceDir.
-func GenerateBuildFiles(workspaceDir, sdkDir string) error {
+func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
 	if !filepath.IsAbs(workspaceDir) {
 		return errors.New("workspace must be an absolute path")
 	}
@@ -39,6 +39,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 	log.Printf("Generating BUILD files for %s", sdkDir)
 	gen := &buildGen{
 		workspaceDir: filepath.Clean(workspaceDir),
+		verbose: verbose,
 		sdkDir:       filepath.Clean(sdkDir),
 		targets:      make(map[string]*possibleTargets),
 	}
@@ -49,6 +50,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string) error {
 type buildGen struct {
 	// These are pre-cleaned by GenerateBuildFiles
 	workspaceDir, sdkDir string
+	verbose bool
 	targets              map[string]*possibleTargets // include name -> all possible targets
 	rc                   *bazelifyrc.Configuration
 }
@@ -86,6 +88,9 @@ func (b *buildGen) loadBazelifyRC() error {
 		b.targets[name] = &possibleTargets{
 			override: override,
 		}
+	}
+	if b.verbose {
+		log.Printf("Using .bazerlifyrc:\n%+v", b.rc)
 	}
 	return nil
 }
@@ -232,7 +237,9 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 	cIncludes, err := b.readIncludes(filepath.Join(dirName, cFileName), info.Name())
 	if err != nil {
 		// TODO: hide this one behind a verbose flag
-		log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
+		if b.verbose {
+		 log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
+		}
 		return nil
 	}
 	b.populateIncludesInTargets(cIncludes)
