@@ -46,7 +46,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
 	return gen.generate()
 }
 
-// BuildGenerator generates Bazel BUILD files for an Nrf52 SDK.
+// buildGen generates Bazel BUILD files for an Nrf52 SDK.
 type buildGen struct {
 	// These are pre-cleaned by GenerateBuildFiles
 	workspaceDir, sdkDir string
@@ -177,7 +177,7 @@ func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string)
 func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		log.Printf("%s: %v", b.prettySDKPath(path), err)
-		return nil
+		return err
 	}
 	relPath, err := filepath.Rel(b.sdkDir, path)
 	if err != nil {
