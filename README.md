@@ -48,6 +48,22 @@ To solve this, I plan on using a Bazel
 rule, but I am thinking about ways to make this process simpler and more
 generic.
 
+#### Non-1:1 header and source file names
+
+We only support 1:1 .h and .c file names. There are some cases where the .c
+file is named differently, or there are multiple .c files for a single .h file.
+
+For example, things like this break:
+
+* `a.h` and `a_impl.c`
+* `a.h` and `a.c` and `a_component.c`
+
+I could potentially solve this by searching for .c files that include the .h in
+the same directory, but that has many pitfalls. Or, I could search .c files for
+implementations of the functions in the headers, but that is a much more
+difficult problem. The simplest solution is to provide a different kind of
+override in `.bazelifyrc`.
+
 ### Setup
 
 Add this to your WORKSPACE file:
