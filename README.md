@@ -25,17 +25,6 @@ We have a few known limitations that make nrfbazelify difficult to use. I plan
 on tackling each issue, when I have time. I plan to eventually put a permissive
 license on this code, but I'd like to get it into a better state first.
 
-#### Include paths
-
-Most things in the nrf SDK simply include a header file, like 
-`#include "sdk_config.h"`. Unfortunately, enough cases don't do this, so I
-should implement actual path searching.
-
-For example, things like this break:
-
-* `#include "../src/nrfx_usbd_errata.h"`
-* `#include "include/ocrypto_sha512.h"`
-
 #### Per-cc_binary includes
 
 Some includes change depending on which cc_binary you're building from. For
