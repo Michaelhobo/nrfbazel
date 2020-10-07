@@ -110,8 +110,9 @@ nrfbazel_dependencies()
 ### Usage
 
 ```bash
-bazel run //:nrfbazelify -- --workspace $(realpath <workspace dir>) \
-                            --sdk $(realpath <sdk dir>)
+bazel run @nrfbazel//cmd/nrfbazelify --
+    --workspace $(realpath <workspace dir>) \
+    --sdk $(realpath <sdk dir>)
 ```
 
 **This will delete all BUILD files in /your/repo/abs/path/nrf_sdk_dir, and generate new ones.**
