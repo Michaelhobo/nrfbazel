@@ -7,7 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Michaelhobo/nrfbazel/bazelifyrc"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/golang/protobuf/proto"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 var testDataDir = "testdata"
@@ -214,6 +218,55 @@ func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
 	}
 }
 
+func TestGenerateBuildFiles_BazelifyRCHint(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_hint")
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
+	}
+	hintPath := filepath.Join(sdkDir, ".bazelifyrc.hint")
+	hintText, err := ioutil.ReadFile(hintPath)
+	if err != nil {
+		t.Fatalf("ioutil.ReadFile(%s): %v", hintPath, err)
+	}
+	var hint bazelifyrc.Configuration 
+	if err := proto.UnmarshalText(string(hintText), &hint); err != nil {
+		t.Fatalf("proto.UnmarshalText(%s): %v", string(hintText), err)
+	}
+	if diff := cmp.Diff(&bazelifyrc.Configuration{
+		TargetOverrides: map[string]string{
+			"doesnotexist.h": "PLEASE RESOLVE: ",
+		},
+	}, hint, protocmp.Transform()); diff != "" {
+		t.Fatalf("bazelifyrc hint (-want +got): %s", diff)
+	}
+}
+
+func TestGenerateBuildFiles_BazelifyRCHintKeepOverride(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_hint_keep_override")
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
+	}
+	hintPath := filepath.Join(sdkDir, ".bazelifyrc.hint")
+	hintText, err := ioutil.ReadFile(hintPath)
+	if err != nil {
+		t.Fatalf("ioutil.ReadFile(%s): %v", hintPath, err)
+	}
+	var hint bazelifyrc.Configuration 
+	if err := proto.UnmarshalText(string(hintText), &hint); err != nil {
+		t.Fatalf("proto.UnmarshalText(%s): %v", string(hintText), err)
+	}
+	if diff := cmp.Diff(&bazelifyrc.Configuration{
+		TargetOverrides: map[string]string{
+			"overridden.h": "//something",
+			"doesnotexist.h": "PLEASE RESOLVE: ",
+		},
+	}, hint, protocmp.Transform()); diff != "" {
+		t.Fatalf("bazelifyrc hint (-want +got): %s", diff)
+	}
+}
+
 func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
 	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_target_overrides", "sdkdir")
@@ -361,4 +414,8 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 	})
+}
+
+func TestGenerateBuildFiles_ResolutionHint(t *testing.T) {
+
 }

@@ -236,8 +236,6 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 
 	// Pre-resolve any targets whose relative path can already be resolved to a file.
 	for _, rel := range relative {
-		d := filepath.Clean(filepath.Dir(filepath.Join(dirName, rel)))
-		log.Printf("RESOLVEDTARGETS formatTarget rel=%q dir=%q dirName=%q", rel, d, dirName)
 		resolvedTargets = append(resolvedTargets, b.formatTarget(&possibleTargets{
 			possible: []*targetInfo{
 				{
@@ -392,9 +390,19 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
 		rc.TargetOverrides = make(map[string]string)
 	}
 	for name, possible := range unresolved {
+		if override := possible.override; override != "" {
+			log.Fatalf("No resolution hint needed for include %q with override %q", name, override)
+		}
+		if override := rc.GetTargetOverrides()[name]; override != "" {
+			log.Fatalf("Override already exists for include %q: %q", name, override)
+		} 
 		rc.GetTargetOverrides()[name] = b.formatTarget(possible, "")
 	}
 	rcText := proto.MarshalTextString(rc)
 	rcPath := filepath.Join(b.sdkDir, rcFilename)
-	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again:\n\n%s", rcPath, rcText)
+	rcHintPath := rcPath + ".hint"
+	if err := ioutil.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
+		return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v", err)
+	}
+	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s", rcPath, rcHintPath)
 }

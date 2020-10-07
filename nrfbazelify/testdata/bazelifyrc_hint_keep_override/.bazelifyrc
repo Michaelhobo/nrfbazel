@@ -1,0 +1,4 @@
+target_overrides <
+  key: "overridden.h"
+  value: "//something"
+>
