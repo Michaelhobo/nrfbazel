@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
@@ -42,7 +43,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
 	log.Printf("Generating BUILD files for %s", sdkDir)
 	gen := &buildGen{
 		workspaceDir: filepath.Clean(workspaceDir),
-		verbose: verbose,
+		verbose: 			verbose,
 		sdkDir:       filepath.Clean(sdkDir),
 		targets:      make(map[string]*possibleTargets),
 	}
@@ -118,6 +119,13 @@ func (b *buildGen) resolveTargets() error {
 			for _, resolved := range target.resolvedTargets {
 				deps = append(deps, resolved)
 			}
+			
+			// Sort the srcs, hdrs, and deps so output has a deterministic order.
+			// This is especially useful for tests.
+			sort.Strings(target.srcs)
+			sort.Strings(target.hdrs)
+			sort.Strings(deps)
+
 			if err := buildfile.WriteLibrary(&buildfile.Library{
 				Dir:      target.dir,
 				Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
@@ -149,7 +157,7 @@ func (b *buildGen) targetFromInclude(include, ownDir string) string {
 	return b.formatTarget(possibleTargets, ownDir)
 }
 
-// formatInclude formats the Bazel target.
+// formatTarget formats the Bazel target.
 // If possibleTargets does not have an override or does not have exactly 1 possible target,
 // we will print a PLEASE RESOLVE in the output.
 func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string) string {
@@ -228,34 +236,15 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		return nil
 	}
 
-	relative, overridden, needsResolution :=  b.splitResolvableIncludes(path, hIncludes)
+	resolved, unresolved :=  b.splitResolvableIncludes(path, hIncludes)
 
-	b.populateIncludesInTargets(needsResolution)
-
-	var resolvedTargets []string
-
-	// Pre-resolve any targets whose relative path can already be resolved to a file.
-	for _, rel := range relative {
-		resolvedTargets = append(resolvedTargets, b.formatTarget(&possibleTargets{
-			possible: []*targetInfo{
-				{
-					dir: filepath.Clean(filepath.Dir(filepath.Join(dirName, rel))),
-					hdrs: []string{filepath.Base(rel)},
-				},
-			},
-		}, dirName))
-	}
-
-	// Pre-resolve any targets that are overridden
-	for _, include := range overridden {
-		resolvedTargets = append(resolvedTargets, b.targets[include].override)
-	}
+	b.populateIncludesInTargets(unresolved)
 
 	target := &targetInfo{
-		dir:      dirName,
-		hdrs:     []string{info.Name()},
-		includes: needsResolution,
-		resolvedTargets: resolvedTargets,
+		dir:             dirName,
+		hdrs:            []string{info.Name()},
+		includes:        unresolved,
+		resolvedTargets: resolved,
 	}
 
 	defer func() {
@@ -284,28 +273,61 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 
 // Split includes that can be resolved early.
 // The remaining includes need to go through the dynamic resolution phase.
-func (b *buildGen) splitResolvableIncludes(path string, includes []string) (relative, overridden, needsResolution []string) {
+func (b *buildGen) splitResolvableIncludes(path string, includes []string) (resolved, unresolved []string) {
 	dir := filepath.Dir(path)
 	for _, include := range includes {
 		// Start by looking for overridden targets
 		if target := b.targets[include]; target != nil {
 			if target.override != "" {
-				overridden = append(overridden, include)
+				resolved = append(resolved, target.override)
 				continue
 			}
 		}
-		relPath := filepath.Join(dir, include)
-		info, err := os.Stat(relPath)
-		if err != nil {
-			needsResolution = append(needsResolution, include)
-			continue
+
+		// Perform a search for the file through the include_dirs in bazelifyrc,
+		// and the current library's directory.
+		searchPaths := make([]string, 0, len(b.rc.GetIncludeDirs()) + 1)
+		searchPaths = append(searchPaths, dir)
+		// Make all search paths absolute. They are relative to the SDK directory,
+		// so append it to the SDK directory, and make it absolute and cleaned.
+		for _, includeDir := range b.rc.GetIncludeDirs() {
+			joined := filepath.Join(b.sdkDir, includeDir)
+			abs, err := filepath.Abs(joined)
+			if err != nil {
+				log.Printf("filepath.Abs(%s): %v", joined, err)
+				continue
+			}
+			searchPaths = append(searchPaths, abs)
 		}
-		if info.IsDir() {
-			needsResolution = append(needsResolution, include)
+
+		// Stat all instances of the include. If we find a relative include that matches,
+		// format the target and resolve it.
+		foundRelative := false
+		for _, searchPath := range searchPaths {
+			search := filepath.Clean(filepath.Join(searchPath, include))
+			info, err := os.Stat(search)
+			if err != nil {
+				continue
+			}
+			if info.IsDir() {
+				continue
+			}
+			foundRelative = true
+			resolved = append(resolved, b.formatTarget(&possibleTargets{
+				possible: []*targetInfo{
+					{
+						dir: filepath.Dir(search),
+						hdrs: []string{filepath.Base(search)},
+					},
+				},
+			}, dir))
+			break
+		}
+		if foundRelative {
 			continue
 		}
 
-		relative = append(relative, include)
+		unresolved = append(unresolved, include)
 	}
 	return
 }
@@ -401,8 +423,12 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
 	rcText := proto.MarshalTextString(rc)
 	rcPath := filepath.Join(b.sdkDir, rcFilename)
 	rcHintPath := rcPath + ".hint"
-	if err := ioutil.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
-		return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v", err)
+	verboseText := ""
+	if b.verbose {
+		verboseText = fmt.Sprintf("\n.bazelifyrc.hint contents:\n%s", rcText)
 	}
-	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s", rcPath, rcHintPath)
+	if err := ioutil.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
+		return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v%s", err, verboseText)
+	}
+	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s%s", rcPath, rcHintPath, verboseText)
 }
