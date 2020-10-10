@@ -129,6 +129,31 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
 	})
 }
 
+func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "relative_includes")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "up_one"),
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Srcs: []string{"a.c"},
+		Deps:     []string{"//relative_includes/back_and_around:b"},
+		Includes: []string{"."},
+	}, &buildfile.Library{
+		Dir:      filepath.Join(sdkDir, "back_and_around"),
+		Name:     "b",
+		Hdrs:     []string{"b.h"},
+		Srcs: []string{"b.c"},
+		Includes: []string{"."},
+	})
+}
+
 func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 	workspaceDir := mustMakeAbs(t, testDataDir)
 	sdkDir := filepath.Join(workspaceDir, "build_file_exists")

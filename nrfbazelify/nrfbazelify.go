@@ -1,3 +1,6 @@
+// Package nrfbazelify converts nRF5 SDKs to use Bazel.
+// This contains a Bazel BUILD file generator that reads source files
+// and does the heavy lifting of resolving targets and writing BUILD files.
 package nrfbazelify
 
 import (
@@ -112,6 +115,9 @@ func (b *buildGen) resolveTargets() error {
 			for _, include := range target.includes {
 				deps = append(deps, b.targetFromInclude(include, target.dir))
 			}
+			for _, resolved := range target.resolvedTargets {
+				deps = append(deps, resolved)
+			}
 			if err := buildfile.WriteLibrary(&buildfile.Library{
 				Dir:      target.dir,
 				Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
@@ -131,7 +137,7 @@ func (b *buildGen) targetFromInclude(include, ownDir string) string {
 	possibleTargets := b.targets[include]
 	if possibleTargets == nil {
 		// This should never happen since we do pre-processing. Just crash if it occurs.
-		log.Fatalf("b.targets[%s] is nil", include)
+		log.Fatalf("b.targets[%s] is nil, this should never happen!", include)
 	}
 	if possibleTargets.override != "" {
 		return possibleTargets.override
@@ -147,7 +153,6 @@ func (b *buildGen) targetFromInclude(include, ownDir string) string {
 // If possibleTargets does not have an override or does not have exactly 1 possible target,
 // we will print a PLEASE RESOLVE in the output.
 func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string) string {
-
 	var formatted []string
 	for _, possible := range possibleTargets.possible {
 		prefix := ""
@@ -183,6 +188,7 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 	if err != nil {
 		return err
 	}
+
 	// Check to see if path is excluded.
 	for _, exclude := range b.rc.GetExcludes() {
 		matched, err := filepath.Match(exclude, relPath)
@@ -196,16 +202,20 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 			return nil
 		}
 	}
+
 	// Walk through the dir
 	if info.IsDir() {
 		return nil
 	}
+
 	// Remove all BUILD files
 	if info.Name() == "BUILD" {
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("os.Remove(%s): %v", b.prettySDKPath(path), err)
 		}
 	}
+
+	// We only want to deal with .h files
 	if filepath.Ext(path) != ".h" {
 		return nil
 	}
@@ -217,12 +227,37 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
 		return nil
 	}
-	b.populateIncludesInTargets(hIncludes)
+
+	relative, overridden, needsResolution :=  b.splitResolvableIncludes(path, hIncludes)
+
+	b.populateIncludesInTargets(needsResolution)
+
+	var resolvedTargets []string
+
+	// Pre-resolve any targets whose relative path can already be resolved to a file.
+	for _, rel := range relative {
+		d := filepath.Clean(filepath.Dir(filepath.Join(dirName, rel)))
+		log.Printf("RESOLVEDTARGETS formatTarget rel=%q dir=%q dirName=%q", rel, d, dirName)
+		resolvedTargets = append(resolvedTargets, b.formatTarget(&possibleTargets{
+			possible: []*targetInfo{
+				{
+					dir: filepath.Clean(filepath.Dir(filepath.Join(dirName, rel))),
+					hdrs: []string{filepath.Base(rel)},
+				},
+			},
+		}, dirName))
+	}
+
+	// Pre-resolve any targets that are overridden
+	for _, include := range overridden {
+		resolvedTargets = append(resolvedTargets, b.targets[include].override)
+	}
 
 	target := &targetInfo{
 		dir:      dirName,
 		hdrs:     []string{info.Name()},
-		includes: hIncludes,
+		includes: needsResolution,
+		resolvedTargets: resolvedTargets,
 	}
 
 	defer func() {
@@ -243,9 +278,38 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		return nil
 	}
 	b.populateIncludesInTargets(cIncludes)
+
 	target.includes = append(target.includes, cIncludes...)
 	target.srcs = []string{cFileName}
 	return nil
+}
+
+// Split includes that can be resolved early.
+// The remaining includes need to go through the dynamic resolution phase.
+func (b *buildGen) splitResolvableIncludes(path string, includes []string) (relative, overridden, needsResolution []string) {
+	dir := filepath.Dir(path)
+	for _, include := range includes {
+		// Start by looking for overridden targets
+		if target := b.targets[include]; target != nil {
+			if target.override != "" {
+				overridden = append(overridden, include)
+				continue
+			}
+		}
+		relPath := filepath.Join(dir, include)
+		info, err := os.Stat(relPath)
+		if err != nil {
+			needsResolution = append(needsResolution, include)
+			continue
+		}
+		if info.IsDir() {
+			needsResolution = append(needsResolution, include)
+			continue
+		}
+
+		relative = append(relative, include)
+	}
+	return
 }
 
 // We need to make sure b.targets contains an entry for each include that we need.
@@ -305,7 +369,13 @@ func (b *buildGen) shouldIgnore(header string) bool {
 type targetInfo struct {
 	dir        string
 	hdrs, srcs []string
+	// These are includes that aren't relative to this target's base directory.
+	// These will be resolved to targets in resolveTargets.
 	includes   []string
+	// A list of targets that we already resolved.
+	// This happens when we find a relative path include
+	// which does not need to go through the target resolution process.
+	resolvedTargets []string
 }
 
 type possibleTargets struct {
