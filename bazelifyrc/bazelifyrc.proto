@@ -19,4 +19,9 @@ message Configuration {
   // Ignore all of these header files, because they don't need an explicit
   // dependency. This is used to ignore c stdlib headers, e.g. string.h.
   repeated string ignore_headers = 3;
+  // Add a number of include dirs. Relative imports are searched from these
+  // include dirs.
+  // Each include_dir is relative to the SDk directory.
+  // All include_dirs must be within the workspace.
+  repeated string include_dirs = 4;
 }

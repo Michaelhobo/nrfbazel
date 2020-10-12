@@ -146,14 +146,14 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
 		Dir:      filepath.Join(sdkDir, "up_one"),
 		Name:     "a",
 		Hdrs:     []string{"a.h"},
-		Srcs: []string{"a.c"},
+		Srcs: 		[]string{"a.c"},
 		Deps:     []string{"//relative_includes/back_and_around:b"},
 		Includes: []string{"."},
 	}, &buildfile.Library{
 		Dir:      filepath.Join(sdkDir, "back_and_around"),
 		Name:     "b",
 		Hdrs:     []string{"b.h"},
-		Srcs: []string{"b.c"},
+		Srcs: 		[]string{"b.c"},
 		Includes: []string{"."},
 	})
 }
@@ -282,9 +282,9 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 		Deps: []string{
+			"//bazelifyrc_target_overrides/outsidesdkdir:d",
 			"//bazelifyrc_target_overrides/sdkdir/b",
 			"//bazelifyrc_target_overrides/sdkdir/c",
-			"//bazelifyrc_target_overrides/outsidesdkdir:d",
 		},
 	}, &buildfile.Library{
 		Dir:      filepath.Join(sdkDir, "b"),
@@ -365,8 +365,8 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
 		Hdrs:     []string{"a.h"},
 		Includes: []string{"."},
 		Deps: []string{
-			"//bazelifyrc_excludes/included:d",
 			"//bazelifyrc_excludes/included/e",
+			"//bazelifyrc_excludes/included:d",
 		},
 	}, &buildfile.Library{
 		Dir:      sdkDir,
@@ -416,6 +416,31 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 	})
 }
 
-func TestGenerateBuildFiles_ResolutionHint(t *testing.T) {
+func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_include_dirs", "sdkdir")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	checkBuildFiles(t, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "a",
+		Hdrs:     []string{"a.h"},
+		Includes: []string{"."},
+		Deps: []string{
+			"//bazelifyrc_include_dirs/outsidesdkdir/b",
+			"//bazelifyrc_include_dirs/outsidesdkdir:d",
+			":c",
+		},
+	}, &buildfile.Library{
+		Dir:      sdkDir,
+		Name:     "c",
+		Hdrs:     []string{"c.h"},
+		Includes: []string{"."},
+	},
+	)
 
 }
