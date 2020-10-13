@@ -182,7 +182,7 @@ func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string)
 	if len(formatted) == 1 {
 		return formatted[0]
 	}
-	return fmt.Sprintf("PLEASE RESOLVE: %s", strings.Join(formatted, "|"))
+	return fmt.Sprintf("REQUIRED BY %s PLEASE RESOLVE: %s", strings.Join(possibleTargets.requiredBy, ","), strings.Join(formatted, "|"))
 }
 
 // buildTargetsMap walks the nrf52 SDK tree, reads all source files,
@@ -236,9 +236,13 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 		return nil
 	}
 
-	resolved, unresolved :=  b.splitResolvableIncludes(path, hIncludes)
+	resolved, unresolved :=  b.splitResolvableIncludes(dirName, hIncludes)
 
-	b.populateIncludesInTargets(unresolved)
+	requiredBy := info.Name()
+	if b.verbose {
+		requiredBy = b.prettySDKPath(path)
+	}
+	b.populateIncludesInTargets(requiredBy, unresolved)
 
 	target := &targetInfo{
 		dir:             dirName,
@@ -256,25 +260,30 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 
 	// TODO: expand to different types of implementation files.
 	cFileName := fmt.Sprintf("%s.c", shortName)
-	cIncludes, err := b.readIncludes(filepath.Join(dirName, cFileName), info.Name())
+	cFilePath := filepath.Join(dirName, cFileName)
+	cIncludes, err := b.readIncludes(cFilePath, info.Name())
 	if err != nil {
-		// TODO: hide this one behind a verbose flag
 		if b.verbose {
-		 log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
+		 log.Printf("readIncludes(%s): %v", b.prettySDKPath(cFilePath), err)
 		}
 		return nil
 	}
-	b.populateIncludesInTargets(cIncludes)
+	cResolved, cUnresolved := b.splitResolvableIncludes(dirName, cIncludes)
+	cRequiredBy := cFileName
+	if b.verbose {
+		cRequiredBy = b.prettySDKPath(cFilePath)
+	}
+	b.populateIncludesInTargets(cRequiredBy, cUnresolved)
 
-	target.includes = append(target.includes, cIncludes...)
+	target.includes = append(target.includes, cUnresolved...)
+	target.resolvedTargets = append(target.resolvedTargets, cResolved...)
 	target.srcs = []string{cFileName}
 	return nil
 }
 
 // Split includes that can be resolved early.
 // The remaining includes need to go through the dynamic resolution phase.
-func (b *buildGen) splitResolvableIncludes(path string, includes []string) (resolved, unresolved []string) {
-	dir := filepath.Dir(path)
+func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resolved, unresolved []string) {
 	for _, include := range includes {
 		// Start by looking for overridden targets
 		if target := b.targets[include]; target != nil {
@@ -335,11 +344,12 @@ func (b *buildGen) splitResolvableIncludes(path string, includes []string) (reso
 // We need to make sure b.targets contains an entry for each include that we need.
 // When we go through with resolveTargets, we'll check that every target has
 // exactly 1 possible target. If unpopulated, these will show up as 0 possible targets
-func (b *buildGen) populateIncludesInTargets(includes []string) {
+func (b *buildGen) populateIncludesInTargets(requiredBy string, includes []string) {
 	for _, include := range includes {
 		if b.targets[include] == nil {
 			b.targets[include] = &possibleTargets{}
 		}
+		b.targets[include].requiredBy = append(b.targets[include].requiredBy, requiredBy)
 	}
 }
 
@@ -401,6 +411,9 @@ type targetInfo struct {
 type possibleTargets struct {
 	override string
 	possible []*targetInfo
+	// A list of targets that require this dynamic target. For debugging only.
+	// Only for the dynamic resolution phase.
+	requiredBy []string
 }
 
 func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets) string {
