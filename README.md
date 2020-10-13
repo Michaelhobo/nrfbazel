@@ -168,3 +168,15 @@ target_overrides <
   value: "//path/to/d:d"
 >
 ```
+
+### Outstanding Issues
+
+These are issues and problems which exist, but don't have planned solutions
+yet. Most of these involve manual work to make the output usable.
+
+#### Includes guarded by ifdefs, etc
+
+Right now, we read all `#include` statements in source and header files.
+However, some of them are guarded by #ifdefs or other guards. We don't solve
+for this - we just ingest all #includes, and users will have to manually prune
+the BUILD files.
