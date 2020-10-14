@@ -61,7 +61,7 @@ type buildGen struct {
 
 func (b *buildGen) generate() error {
 	if err := b.loadBazelifyRC(); err != nil {
-		log.Printf("Not loading .bazelifyrc: %v", err)
+		return fmt.Errorf("not loading .bazelifyrc: %v", err)
 	}
 	if err := filepath.Walk(b.sdkDir, b.buildTargetsMap); err != nil {
 		return fmt.Errorf("filepath.Walk(%s): %v", b.sdkDir, err)
@@ -76,6 +76,10 @@ func (b *buildGen) loadBazelifyRC() error {
 	// We read this file from the root of the SDK, so that we can have
 	// per-SDK overrides in the same workspace.
 	rcPath := filepath.Join(b.sdkDir, rcFilename)
+	if _, err := os.Stat(rcPath); err != nil {
+		log.Printf("WARNING: No .bazelifyrc found: os.Stat: %v", err)
+		return nil
+	}
 	rcData, err := ioutil.ReadFile(rcPath)
 	if err != nil {
 		return fmt.Errorf("Could not read %s: %v", rcFilename, err)

@@ -442,3 +442,18 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
 		Includes: []string{"."},
 	})
 }
+
+func TestGenerateBuildFiles_BazelifyRCMalformed(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "bazelifyrc_malformed")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): nil error, want an error", testDataDir, sdkDir)
+	}
+	hintPath := filepath.Join(sdkDir, ".bazelifyrc.hint")
+	if _, err := os.Stat(hintPath); err == nil {
+		t.Fatalf("os.Stat(%s): nil error, want an error", hintPath)
+	}
+}
