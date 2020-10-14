@@ -106,9 +106,21 @@ func (b *buildGen) loadBazelifyRC() error {
 func (b *buildGen) resolveTargets() error {
 	unresolved := make(map[string]*possibleTargets) // maps name -> possible targets
 	for name, possibleTargets := range b.targets {
-		if possibleTargets.override == "" && len(possibleTargets.possible) != 1 {
-			unresolved[name] = possibleTargets
+		// If there's a target override, then this is resolved.
+		if possibleTargets.override != "" {
+			continue
 		}
+		// If there's only 1 possible target, then this can be resolved.
+		if len(possibleTargets.possible) == 1 {
+			continue
+		}
+		// Targets that aren't required by anything can happen if they've all been
+		// resolved by relative lookups.
+		if len(possibleTargets.requiredBy) == 0 {
+			continue
+		}
+		// If none of these cases match, then we're unresolved.
+		unresolved[name] = possibleTargets
 	}
 	if len(unresolved) > 0 {
 		return errors.New(b.generateResolutionHint(unresolved))
@@ -415,7 +427,7 @@ type targetInfo struct {
 type possibleTargets struct {
 	override string
 	possible []*targetInfo
-	// A list of targets that require this dynamic target. For debugging only.
+	// A list of targets that require this dynamic target.
 	// Only for the dynamic resolution phase.
 	requiredBy []string
 }
