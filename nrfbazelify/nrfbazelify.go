@@ -66,8 +66,11 @@ func (b *buildGen) generate() error {
 	if err := filepath.Walk(b.sdkDir, b.buildTargetsMap); err != nil {
 		return fmt.Errorf("filepath.Walk(%s): %v", b.sdkDir, err)
 	}
-	if err := b.resolveTargets(); err != nil {
+	if err := b.checkResolvable(); err != nil {
 		return fmt.Errorf("failed to resolve targets: %v", err)
+	}
+	if err := b.outputFiles(); err != nil {
+		return fmt.Errorf("failed to output BUILD files: %v", err)
 	}
 	return nil
 }
@@ -103,7 +106,7 @@ func (b *buildGen) loadBazelifyRC() error {
 	return nil
 }
 
-func (b *buildGen) resolveTargets() error {
+func (b *buildGen) checkResolvable() error {
 	unresolved := make(map[string]*possibleTargets) // maps name -> possible targets
 	for name, possibleTargets := range b.targets {
 		// If there's a target override, then this is resolved.
@@ -125,7 +128,12 @@ func (b *buildGen) resolveTargets() error {
 	if len(unresolved) > 0 {
 		return errors.New(b.generateResolutionHint(unresolved))
 	}
-	// Loop through each target, and call buildfile.WriteLibrary()
+	return nil
+}
+
+func (b *buildGen) outputFiles() error {
+	// Loop through each target, and add the library to the given file
+	files := make(map[string]*buildfile.File) // target directory -> BUILD file
 	for _, config := range b.targets {
 		for _, target := range config.possible {
 			var deps []string
@@ -142,18 +150,27 @@ func (b *buildGen) resolveTargets() error {
 			sort.Strings(target.hdrs)
 			sort.Strings(deps)
 
-			if err := buildfile.WriteLibrary(&buildfile.Library{
-				Dir:      target.dir,
+			// Find or create a new BUILD file, and add our library to it.
+			if file := files[target.dir]; file == nil {
+				files[target.dir] = buildfile.New(target.dir)
+			}
+			files[target.dir].AddLibrary(&buildfile.Library{
 				Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
 				Srcs:     target.srcs,
 				Hdrs:     target.hdrs,
 				Deps:     deps,
 				Includes: []string{"."},
-			}); err != nil {
-				return err
-			}
+			})
 		}
 	}
+
+	// Write all BUILD files to disk.
+	for _, file := range files {
+		if err := file.Write(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
