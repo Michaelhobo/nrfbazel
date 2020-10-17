@@ -2,14 +2,70 @@ package buildfile
 
 import (
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
+	"sort"
 )
+
+// New creates a new File.
+func New(dir string) *File {
+	return &File{
+		Path: filepath.Join(dir, "BUILD"),
+		loads: make(map[string][]string),
+		packageVisibility: "//visibility:public",
+	}
+}
+
+// File holds information for generating a BUILD file.
+type File struct {
+	Path string
+	libs []*Library
+	loads map[string][]string // load file -> list of load symbols
+	packageVisibility string
+}
+
+// Write writes the file's generated contents to a file.
+func (f *File) Write() error {
+	return ioutil.WriteFile(f.Path, []byte(f.Generate()), 0644)
+}
+
+// Generate generates the output contents of the file.
+func (f *File) Generate() string {
+	var out string
+
+	// Add default visibility
+	out += fmt.Sprintf("package(default_visibility=%q)\n", f.packageVisibility)
+
+	// Generate load statements
+	for file, symbols := range f.loads {
+		out += fmt.Sprintf("load(%q", file)
+		for _, symbol := range symbols {
+			out += fmt.Sprintf(", %q", symbol)
+		}
+		out += ")\n"
+	}
+
+	// Sort our libs by the Name field, to provide a stable ordering.
+	// This prevents churn between runs of nrfbazelify.
+	sort.Slice(f.libs, func(i, j int) bool {
+		return f.libs[i].Name < f.libs[j].Name
+	})
+
+	// Generate all header files
+	for _, lib := range f.libs {
+		out += lib.Generate() + "\n"
+	}
+
+	return out
+}
+
+// AddLibrary adds a library to this file.
+func (f *File) AddLibrary(lib *Library) {
+	f.libs = append(f.libs, lib)
+}
 
 // Library contains the information needed to generate a cc_library rule.
 type Library struct {
-	// directory where the BUILD file is written
-	Dir string
 	// name of the library rule
 	Name     string
 	Srcs     []string
@@ -18,38 +74,24 @@ type Library struct {
 	Includes []string
 }
 
-// GenerateLibrary generates the contents of the cc_library rule.
-func GenerateLibrary(lib *Library) (path, contents string) {
-	path = filepath.Join(lib.Dir, "BUILD")
-	contents = fmt.Sprintf("cc_library(name=%q", lib.Name)
-	if lib.Srcs != nil {
-		contents += fmt.Sprintf(", srcs = %s", bazelStringList(lib.Srcs))
+// Generate generates the output format of this library.
+func (l *Library) Generate() string {
+	contents := fmt.Sprintf("cc_library(name=%q", l.Name)
+	if l.Srcs != nil {
+		contents += fmt.Sprintf(", srcs = %s", bazelStringList(l.Srcs))
 	}
-	if lib.Hdrs != nil {
-		contents += fmt.Sprintf(", hdrs = %s", bazelStringList(lib.Hdrs))
+	if l.Hdrs != nil {
+		contents += fmt.Sprintf(", hdrs = %s", bazelStringList(l.Hdrs))
 	}
-	if lib.Includes != nil {
-		contents += fmt.Sprintf(", includes = %s", bazelStringList(lib.Includes))
+	if l.Includes != nil {
+		contents += fmt.Sprintf(", includes = %s", bazelStringList(l.Includes))
 	}
-	if lib.Deps != nil {
-		contents += fmt.Sprintf(", deps = %s", bazelStringList(lib.Deps))
+	if l.Deps != nil {
+		contents += fmt.Sprintf(", deps = %s", bazelStringList(l.Deps))
 	}
 	contents += ")\n"
-	return
-}
+	return contents
 
-// WriteLibrary writes the contents of the cc_library rule to file.
-func WriteLibrary(lib *Library) error {
-	path, contents := GenerateLibrary(lib)
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if _, err := file.WriteString(contents); err != nil {
-		return err
-	}
-	return nil
 }
 
 // bazelStringList converts the input slice of strings into a Bazel list
