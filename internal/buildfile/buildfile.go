@@ -11,7 +11,6 @@ import (
 func New(dir string) *File {
 	return &File{
 		Path: filepath.Join(dir, "BUILD"),
-		loads: make(map[string][]string),
 		packageVisibility: "//visibility:public",
 	}
 }
@@ -19,8 +18,9 @@ func New(dir string) *File {
 // File holds information for generating a BUILD file.
 type File struct {
 	Path string
+	loads []*Load
 	libs []*Library
-	loads map[string][]string // load file -> list of load symbols
+	labelAttrs []*LabelAttr
 	packageVisibility string
 }
 
@@ -37,23 +37,27 @@ func (f *File) Generate() string {
 	out += fmt.Sprintf("package(default_visibility=%q)\n", f.packageVisibility)
 
 	// Generate load statements
-	for file, symbols := range f.loads {
-		out += fmt.Sprintf("load(%q", file)
-		for _, symbol := range symbols {
-			out += fmt.Sprintf(", %q", symbol)
-		}
-		out += ")\n"
+	sort.Slice(f.loads, func(i, j int) bool{
+		return f.loads[i].Source < f.loads[j].Source
+	})
+	for _, load := range f.loads {
+		out += load.Generate() + "\n"
 	}
 
-	// Sort our libs by the Name field, to provide a stable ordering.
-	// This prevents churn between runs of nrfbazelify.
+	// Generate all libraries
 	sort.Slice(f.libs, func(i, j int) bool {
 		return f.libs[i].Name < f.libs[j].Name
 	})
-
-	// Generate all header files
 	for _, lib := range f.libs {
 		out += lib.Generate() + "\n"
+	}
+
+	// Generate all label_attrs
+	sort.Slice(f.labelAttrs, func(i, j int) bool {
+		return f.labelAttrs[i].Name < f.labelAttrs[j].Name
+	})
+	for _, labelAttr := range f.labelAttrs {
+		out += labelAttr.Generate() + "\n"
 	}
 
 	return out
@@ -62,6 +66,11 @@ func (f *File) Generate() string {
 // AddLibrary adds a library to this file.
 func (f *File) AddLibrary(lib *Library) {
 	f.libs = append(f.libs, lib)
+}
+
+// AddLabelAttr adds a label attr to this file.
+func (f *File) AddLabelAttr(labelAttr *LabelAttr) {
+	f.labelAttrs = append(f.labelAttrs, labelAttr)
 }
 
 // Library contains the information needed to generate a cc_library rule.
@@ -92,6 +101,33 @@ func (l *Library) Generate() string {
 	contents += ")\n"
 	return contents
 
+}
+
+// LabelAttr represents a label_attr rule.
+type LabelAttr struct {
+	Name string
+	BuildSettingDefault string
+}
+
+// Generate generates the output format of this label_attr.
+func (l *LabelAttr) Generate() string {
+	return fmt.Sprintf("label_attr(name=%q, build_setting_default=%q)", l.Name, l.BuildSettingDefault)
+}
+
+// Load represents a load() statement.
+type Load struct {
+	Source string
+	Symbols []string
+}
+
+// Generate generates the output format of this load statement.
+func (l *Load) Generate() string {
+	contents := fmt.Sprintf("load(%q", l.Source)
+	for _, symbol := range l.Symbols {
+		contents += fmt.Sprintf(", %q", symbol)
+	}
+	contents += ")"
+	return contents
 }
 
 // bazelStringList converts the input slice of strings into a Bazel list

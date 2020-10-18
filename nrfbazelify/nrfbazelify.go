@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/Michaelhobo/nrfbazel/internal/remap"
 	"github.com/golang/protobuf/proto"
 
 	"github.com/Michaelhobo/nrfbazel/bazelifyrc"
@@ -24,6 +25,8 @@ import (
 const (
 	// We read this file from the root of the SDK.
 	rcFilename = ".bazelifyrc"
+	// We write the contents of our remap features to this file.
+	bzlFilename = "remap.bzl"
 )
 
 var includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
@@ -100,6 +103,21 @@ func (b *buildGen) loadBazelifyRC() error {
 			override: override,
 		}
 	}
+	sdkFromWorkspace, err := filepath.Rel(b.workspaceDir, b.sdkDir)
+	if err != nil {
+		return err
+	}
+	for _, r := range rc.GetRemaps() {
+		if filepath.Ext(r) != ".h" {
+			return fmt.Errorf("invalid remap %q: must have .h extension", r)
+		}
+		if b.targets[r] == nil {
+			b.targets[r] = &possibleTargets{}
+		}
+		if b.targets[r].override == "" {
+			b.targets[r].override = remap.GenerateLabel(r, sdkFromWorkspace)
+		}
+	}
 	if b.verbose {
 		log.Printf("Using .bazerlifyrc:\n%+v", b.rc)
 	}
@@ -132,8 +150,26 @@ func (b *buildGen) checkResolvable() error {
 }
 
 func (b *buildGen) outputFiles() error {
-	// Loop through each target, and add the library to the given file
 	files := make(map[string]*buildfile.File) // target directory -> BUILD file
+
+	// Generate remap rules in the BUILD file for the SDK directory
+	sdkFromWorkspace, err := filepath.Rel(b.workspaceDir, b.sdkDir)
+	if err != nil {
+		return err
+	}
+	files[b.sdkDir] = buildfile.New(b.sdkDir)
+	r := remap.New(b.rc.GetRemaps(), sdkFromWorkspace)
+	for _, lib := range r.Libraries() {
+		files[b.sdkDir].AddLibrary(lib)
+	}
+	for _, labelAttr := range r.LabelAttrs() {
+		files[b.sdkDir].AddLabelAttr(labelAttr)
+	}
+	if err := ioutil.WriteFile(filepath.Join(b.sdkDir, bzlFilename), r.BzlContents(), 0644); err != nil {
+		return err
+	}
+
+	// Loop through each target, and add the library to the given file
 	for _, config := range b.targets {
 		for _, target := range config.possible {
 			var deps []string
