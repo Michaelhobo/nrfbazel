@@ -1,0 +1,6 @@
+source_sets: {
+  name: "ab"
+  srcs: "b.c"
+  hdrs: "a.h"
+  hdrs: "b.h"
+}

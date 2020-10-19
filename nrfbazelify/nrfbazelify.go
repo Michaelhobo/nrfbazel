@@ -49,16 +49,20 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
     verbose: 			verbose,
     sdkDir:       filepath.Clean(sdkDir),
     targets:      make(map[string]*possibleTargets),
+    sourceSets:   make(map[string]map[string]string),
   }
   return gen.generate()
 }
 
-// buildGen generates Bazel BUILD files for an Nrf52 SDK.
+// buildGen generates Bazel BUILD files for nrf SDKs.
 type buildGen struct {
   // These are pre-cleaned by GenerateBuildFiles
   workspaceDir, sdkDir string
   verbose bool
   targets              map[string]*possibleTargets // include name -> all possible targets
+  sourceSets           map[string]map[string]string // dir (sdk-relative) -> header name -> target label
+  // Additional targets that need dependencies resolved, but the library itself is already set.
+  sourceSetTargets     []*sourceSetTarget
   rc                   *bazelifyrc.Configuration
 }
 
@@ -68,6 +72,9 @@ func (b *buildGen) generate() error {
   }
   if err := filepath.Walk(b.sdkDir, b.buildTargetsMap); err != nil {
     return fmt.Errorf("filepath.Walk(%s): %v", b.sdkDir, err)
+  }
+  if err := b.walkSourceSets(); err != nil {
+    return fmt.Errorf("failed to walk source sets: %v", err)
   }
   if err := b.checkResolvable(); err != nil {
     return fmt.Errorf("failed to resolve targets: %v", err)
@@ -121,10 +128,49 @@ func (b *buildGen) loadBazelifyRC() error {
       b.targets[r].override = remap.GenerateLabel(r, sdkFromWorkspace)
     }
   }
+  // Build the sourceSets map for searching for targets.
+  for _, sourceSet := range rc.GetSourceSets() {
+    if sourceSet.GetName() == "" {
+      return fmt.Errorf("sourceSet %v requires name", sourceSet)
+    }
+    if sourceSet.GetDir() == "" {
+      sourceSet.Dir = "."
+    }
+    if b.sourceSets[sourceSet.GetDir()] == nil {
+      b.sourceSets[sourceSet.GetDir()] = make(map[string]string)
+    }
+    target, err := b.absLabel(sourceSet.GetDir(), sourceSet.GetName())
+    if err != nil {
+      return err
+    }
+    for _, src := range sourceSet.GetSrcs() {
+      b.sourceSets[sourceSet.GetDir()][src] = target
+    }
+    for _, hdr := range sourceSet.GetHdrs() {
+      b.sourceSets[sourceSet.GetDir()][hdr] = target
+    }
+  }
   if b.verbose {
     log.Printf("Using .bazerlifyrc:\n%+v", b.rc)
   }
   return nil
+}
+
+// Generate an absolute label
+func (b *buildGen) absLabel(dirFromSDK, name string) (string, error) {
+  fullDir := filepath.Join(b.sdkDir, dirFromSDK)
+  dirFromWorkSpace, err := filepath.Rel(b.workspaceDir, fullDir)
+  if err != nil {
+    return "", err
+  }
+  if dirFromWorkSpace == "." {
+    dirFromWorkSpace = ""
+  }
+  target := fmt.Sprintf("//%s", dirFromWorkSpace)
+  if filepath.Base(dirFromSDK) != name {
+    target += fmt.Sprintf(":%s", name)
+  }
+  return target, nil
 }
 
 func (b *buildGen) checkResolvable() error {
@@ -179,36 +225,18 @@ func (b *buildGen) outputFiles() error {
   // Loop through each target, and add the library to the given file
   for _, config := range b.targets {
     for _, target := range config.possible {
-      var deps []string
-      for _, include := range target.includes {
-        deps = append(deps, b.targetFromInclude(include, target.dir))
+      dir := target.dir
+      name := strings.TrimSuffix(target.hdrs[0], filepath.Ext(target.hdrs[0]))
+      if b.searchSourceSets(dir, target.hdrs[0]) != "" {
+        continue
       }
-      for _, resolved := range target.resolvedTargets {
-        deps = append(deps, resolved)
-      }
-      
-      // Sort the srcs, hdrs, and deps so output has a deterministic order.
-      // This is especially useful for tests.
-      sort.Strings(target.srcs)
-      sort.Strings(target.hdrs)
-      sort.Strings(deps)
-   
-      // Find or create a new BUILD file, and add our library to it.
-      if file := files[target.dir]; file == nil {
-        files[target.dir] = buildfile.New(target.dir)
-        files[target.dir].AddLoad(&buildfile.Load{
-          Source: "@rules_cc//cc:defs.bzl",
-          Symbols: []string{"cc_library"},
-        })
-      }
-      files[target.dir].AddLibrary(&buildfile.Library{
-        Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
-        Srcs:     target.srcs,
-        Hdrs:     target.hdrs,
-        Deps:     deps,
-        Includes: []string{"."},
-      })
+      b.addLibrary(name, dir, target, files)
     }
+  }
+
+  // Loop through the source set targets, which have already been resolved.
+  for _, sourceSet := range b.sourceSetTargets {
+    b.addLibrary(sourceSet.name, sourceSet.dir, sourceSet.target, files)
   }
 
   // Write all BUILD files to disk.
@@ -219,6 +247,39 @@ func (b *buildGen) outputFiles() error {
   }
 
   return nil
+}
+
+func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[string]*buildfile.File) {
+  var deps []string
+  for _, include := range target.includes {
+    deps = append(deps, b.targetFromInclude(include, dir))
+  }
+  for _, resolved := range target.resolvedTargets {
+    deps = append(deps, resolved)
+  }
+  
+  // Sort the srcs, hdrs, and deps so output has a deterministic order.
+  // This is especially useful for tests.
+  sort.Strings(target.srcs)
+  sort.Strings(target.hdrs)
+  sort.Strings(deps)
+
+  // Find or create a new BUILD file, and add our library to it.
+  if file := files[target.dir]; file == nil {
+    files[dir] = buildfile.New(dir)
+    files[dir].AddLoad(&buildfile.Load{
+      Source: "@rules_cc//cc:defs.bzl",
+      Symbols: []string{"cc_library"},
+    })
+  }
+
+  files[target.dir].AddLibrary(&buildfile.Library{
+    Name:     name,
+    Srcs:     target.srcs,
+    Hdrs:     target.hdrs,
+    Deps:     deps,
+    Includes: []string{"."},
+  })
 }
 
 func (b *buildGen) targetFromInclude(include, ownDir string) string {
@@ -307,13 +368,18 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
   if filepath.Ext(path) != ".h" {
     return nil
   }
+
+  // If the file is in a source set, we delay processing to a later step.
+  if b.searchSourceSets(filepath.Dir(path), info.Name()) != "" {
+    return nil
+  }
+
   shortName := strings.TrimSuffix(info.Name(), ".h")
   dirName := filepath.Dir(path)
 
   hIncludes, err := b.readIncludes(path, info.Name())
   if err != nil {
-    log.Printf("readIncludes(%s): %v", b.prettySDKPath(path), err)
-    return nil
+    return fmt.Errorf("readIncludes(%s): %v", b.prettySDKPath(path), err)
   }
 
   resolved, unresolved :=  b.splitResolvableIncludes(dirName, hIncludes)
@@ -361,6 +427,78 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
   return nil
 }
 
+type sourceSetTarget struct {
+  // The directory to add the source set to, as an absolute path.
+  dir string
+  // The name of the library generated by this source set.
+  name string
+  // The target info for this source set.
+  target *targetInfo
+}
+
+func (b *buildGen) walkSourceSets() error {
+  for _, sourceSet := range b.rc.GetSourceSets() {
+    ownLabel, err := b.absLabel(sourceSet.GetDir(), sourceSet.GetName())
+    if err != nil {
+      return err
+    }
+
+    var files []string
+    for _, src := range sourceSet.GetSrcs() {
+      files = append(files, filepath.Join(b.sdkDir, sourceSet.GetDir(), src))
+    }
+    for _, hdr := range sourceSet.GetHdrs() {
+      files = append(files, filepath.Join(b.sdkDir, sourceSet.GetDir(), hdr))
+    }
+    uniqueResolved := make(map[string]bool)
+    uniqueUnresolved := make(map[string]bool)
+    for _, file := range files {
+      name := filepath.Base(file)
+      dirName := filepath.Dir(file)
+      includes, err := b.readIncludes(file, "")
+      if err != nil {
+        return fmt.Errorf("readIncludes(%s): %v", file, err)
+      }
+      resolved, unresolved := b.splitResolvableIncludes(dirName, includes)
+      for _, r := range resolved {
+        if r == ownLabel {
+          continue
+        }
+        uniqueResolved[r] = true
+      }
+      for _, u := range unresolved {
+        uniqueUnresolved[u] = true
+      }
+      requiredBy := name
+      if b.verbose {
+        requiredBy = b.prettySDKPath(file)
+      }
+      b.populateIncludesInTargets(requiredBy, unresolved)
+    }
+    buildFileDir := filepath.Join(b.sdkDir, sourceSet.GetDir())
+    var resolved []string
+    for r := range uniqueResolved {
+      resolved = append(resolved, r)
+    }
+    var unresolved []string
+    for u := range uniqueUnresolved {
+      unresolved = append(unresolved, u)
+    }
+    b.sourceSetTargets = append(b.sourceSetTargets, &sourceSetTarget{
+      dir: buildFileDir,
+      name: sourceSet.GetName(),
+      target: &targetInfo{
+        dir: buildFileDir,
+        hdrs: sourceSet.GetHdrs(),
+        srcs: sourceSet.GetSrcs(),
+        includes: unresolved,
+        resolvedTargets: resolved,
+      },
+    })
+  }
+  return nil
+}
+
 // Split includes that can be resolved early.
 // The remaining includes need to go through the dynamic resolution phase.
 func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resolved, unresolved []string) {
@@ -402,14 +540,18 @@ func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resol
         continue
       }
       foundRelative = true
-      resolved = append(resolved, b.formatTarget(&possibleTargets{
-        possible: []*targetInfo{
-          {
-            dir: filepath.Dir(search),
-            hdrs: []string{filepath.Base(search)},
+      target := b.searchSourceSets(filepath.Dir(search), filepath.Base(search))
+      if target == "" {
+        target = b.formatTarget(&possibleTargets{
+          possible: []*targetInfo{
+            {
+              dir: filepath.Dir(search),
+              hdrs: []string{filepath.Base(search)},
+            },
           },
-        },
-      }, dir))
+        }, dir)
+      }
+      resolved = append(resolved, target)
       break
     }
     if foundRelative {
@@ -474,6 +616,22 @@ func (b *buildGen) shouldIgnore(header string) bool {
     }
   }
   return false
+}
+
+// searchSourceSets searches through our source sets for the given header files
+// and generates the correct target if found.
+// If not found, we return an empty string.
+func (b *buildGen) searchSourceSets(dir, base string) string {
+  // We want it relative to the SDK directory, since source sets use this.
+  relDir, err := filepath.Rel(b.sdkDir, dir)
+  if err != nil {
+    // If we write this correctly, this should never happen. Crash.
+    log.Fatalf("filepath.Rel(%q, %q): %v", b.sdkDir, dir, err)
+  }
+  if b.sourceSets[relDir] == nil {
+    return ""
+  }
+  return b.sourceSets[relDir][base]
 }
 
 type targetInfo struct {
