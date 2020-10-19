@@ -17,23 +17,21 @@ const (
 nrf_cc_binary that includes the library.
 """
 load("@rules_cc//cc:defs.bzl", "cc_binary")
-
 `
 
 	remapTransition = `
 def _remap_transition_impl(settings, attr):
-	return {
+  return {
 %s
-	}
+  }
 
 _remap_transition = transition(
-	implementation = _remap_transition_impl,
-	inputs = [],
-	outputs = [
+  implementation = _remap_transition_impl,
+  inputs = [],
+  outputs = [
 %s
-	],
+  ],
 )
-
 `
 	// A single line in the return statement in remapTransition.
 	remapTransitionReturn = "    %q: attr.%s,\n"
@@ -44,7 +42,7 @@ _remap_transition = transition(
 # All this does is copy the cc_binary's output to its own output and propagate
 # its runfiles and executable so "bazel run" works.
 def _remap_rule_impl(ctx):
-	actual_binary = ctx.attr.actual_binary[0]
+  actual_binary = ctx.attr.actual_binary[0]
   outfile = ctx.actions.declare_file(ctx.label.name)
   cc_binary_outfile = actual_binary[DefaultInfo].files.to_list()[0]
 
@@ -73,7 +71,6 @@ _remap_rule = rule(
   # Making this executable means it works with "$ bazel run".
   executable = True,
 )
-
 `
 	// A single line of the attrs block in remapRule.
 	remapRuleAttr = "    %q: attr.label(),\n"
@@ -93,17 +90,16 @@ def nrf_cc_binary(name, remap = None, **kwargs):
   cc_binary_name = name + "_native_binary"
   _remap_rule(
     name = name,
-		actual_binary = ":{}".format(cc_binary_name),
+    actual_binary = ":{}".format(cc_binary_name),
 %s
   )
   cc_binary(
     name = cc_binary_name,
     **kwargs
   )
-
 `
 	// A single line of the _remap_rule block in nrfCCBinary.
-	nrfCCBinaryRemapRule = "    %s = remap[%q],\n"
+	nrfCCBinaryRemapRule = "    %s = remap.get(%q, %q),\n"
 )
 
 // New creates a new remap from a list of header files from
@@ -114,14 +110,15 @@ func New(headers []string, sdkFromWorkspace string) *Remaps {
 	if len(headers) != 0 {
 		libs = append(libs, &buildfile.Library{Name: emptyRemap})
 	}
-	var labelAttrs []*buildfile.LabelAttr
+	var labelSettings []*buildfile.LabelSetting
 	var remaps []*processed
 	for _, header := range headers {
 		shortName := strings.TrimSuffix(header, filepath.Ext(header))
 		remapName := fmt.Sprintf("%s_remap", shortName)
-		labelAttrs = append(labelAttrs, &buildfile.LabelAttr{
+		buildSettingDefault := fmt.Sprintf("//%s:%s", sdkFromWorkspace, emptyRemap)
+		labelSettings = append(labelSettings, &buildfile.LabelSetting{
 			Name: remapName,
-			BuildSettingDefault: fmt.Sprintf("//%s:%s", sdkFromWorkspace, emptyRemap),
+			BuildSettingDefault: buildSettingDefault,
 		})
 		label := fmt.Sprintf("//%s", sdkFromWorkspace)
 		if filepath.Base(sdkFromWorkspace) != remapName {
@@ -131,6 +128,7 @@ func New(headers []string, sdkFromWorkspace string) *Remaps {
 			header: header,
 			shortName: shortName,
 			label: label,
+			buildSettingDefault: buildSettingDefault,
 		})
 	}
 
@@ -141,7 +139,7 @@ func New(headers []string, sdkFromWorkspace string) *Remaps {
 
 	return &Remaps{
 		libs: libs,
-		labelAttrs: labelAttrs,
+		labelSettings: labelSettings,
 		bzlContents: []byte(bzlContents),
 	}
 }
@@ -164,6 +162,8 @@ type processed struct {
 	shortName string
 	// The name of the remap label, which is //sdk_dir:short_name_remap
 	label string
+	// If no default is provided, the build setting default label to use.
+	buildSettingDefault string
 }
 
 func generateRemapTransition(remaps []*processed) string {
@@ -187,7 +187,7 @@ func generateRemapRule(remaps []*processed) string {
 func generateNrfCCBinary(remaps []*processed) string {
 	var remapRules string
 	for _, remap := range remaps {
-		remapRules += fmt.Sprintf(nrfCCBinaryRemapRule, remap.shortName, remap.header)
+		remapRules += fmt.Sprintf(nrfCCBinaryRemapRule, remap.shortName, remap.header, remap.buildSettingDefault)
 	}
 	return fmt.Sprintf(nrfCCBinary, remapRules)
 }
@@ -195,7 +195,7 @@ func generateNrfCCBinary(remaps []*processed) string {
 // Remaps holds data for remapping header files dynamically.
 type Remaps struct {
 	libs []*buildfile.Library
-	labelAttrs []*buildfile.LabelAttr
+	labelSettings []*buildfile.LabelSetting
 	bzlContents []byte
 }
 
@@ -204,9 +204,9 @@ func (r *Remaps) Libraries() []*buildfile.Library {
 	return r.libs
 }
 
-// LabelAttrs returns the label_attr rules that need to be created.
-func (r *Remaps) LabelAttrs() []*buildfile.LabelAttr {
-	return r.labelAttrs
+// LabelSettings returns the label_attr rules that need to be created.
+func (r *Remaps) LabelSettings() []*buildfile.LabelSetting {
+	return r.labelSettings
 }
 
 // BzlContents returns the .bzl file's contents.

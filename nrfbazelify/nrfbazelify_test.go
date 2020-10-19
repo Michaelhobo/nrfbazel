@@ -28,7 +28,7 @@ func mustMakeAbs(t *testing.T, dir string) string {
 	return abs
 }
 
-func newBuildFile(dir string, libs []*buildfile.Library, labelAttrs []*buildfile.LabelAttr) *buildfile.File {
+func newBuildFile(dir string, libs []*buildfile.Library, labelSettings []*buildfile.LabelSetting) *buildfile.File {
 	out := buildfile.New(dir)
 	out.AddLoad(&buildfile.Load{
 		Source: "@rules_cc//cc:defs.bzl",
@@ -37,8 +37,8 @@ func newBuildFile(dir string, libs []*buildfile.Library, labelAttrs []*buildfile
 	for _, lib := range libs {
 		out.AddLibrary(lib)
 	}
-	for _, labelAttr := range labelAttrs {
-		out.AddLabelAttr(labelAttr)
+	for _, labelSetting := range labelSettings {
+		out.AddLabelSetting(labelSetting)
 	}
 	return out
 }
@@ -101,7 +101,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
 				Deps:     []string{"//nominal/dir:c"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
 			{
 				Name:     "c",
@@ -109,7 +109,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
 				Hdrs:     []string{"c.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -130,14 +130,14 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
 				Deps:     []string{"//name_matches_dir/dir"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
 			{
 				Name:     "dir",
 				Hdrs:     []string{"dir.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -159,7 +159,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
 				Deps:     []string{"//relative_includes/back_and_around:b"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "back_and_around"), []*buildfile.Library{
 			{
 				Name:     "b",
@@ -167,7 +167,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
 				Srcs: 		[]string{"b.c"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -191,7 +191,7 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 				Hdrs:     []string{"a.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 	buildPath := filepath.Join(sdkDir, "BUILD")
 	contents, err := ioutil.ReadFile(buildPath)
@@ -225,7 +225,7 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 				Hdrs:     []string{"workspace_matches_sdk_dir.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -312,21 +312,21 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 				Hdrs:     []string{"c.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "b"), []*buildfile.Library{
 			{
 				Name:     "b",
 				Hdrs:     []string{"b.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "c"), []*buildfile.Library{
 			{
 				Name:     "c",
 				Hdrs:     []string{"c.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -346,7 +346,7 @@ func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
 				Hdrs:     []string{"a.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -377,7 +377,7 @@ func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
 				Hdrs:     []string{"d.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -407,21 +407,21 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
 				Includes: []string{"."},
 				Deps:     []string{":a"},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "included"), []*buildfile.Library{
 			{
 				Name:     "d",
 				Hdrs:     []string{"d.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 		newBuildFile(filepath.Join(sdkDir, "included", "e"), []*buildfile.Library{
 			{
 				Name:     "e",
 				Hdrs:     []string{"e.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 	// Make sure BUILD files aren't created for excluded directories
 	buildShouldNotExist := []string{
@@ -453,7 +453,7 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 				Hdrs:     []string{"a.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -483,7 +483,7 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
 				Hdrs:     []string{"c.h"},
 				Includes: []string{"."},
 			},
-		}, []*buildfile.LabelAttr{}),
+		}, []*buildfile.LabelSetting{}),
 	)
 }
 
@@ -535,7 +535,7 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
 					"//bazelifyrc_remap:b_remap",
 				},
 			},
-		}, []*buildfile.LabelAttr{
+		}, []*buildfile.LabelSetting{
 			{
 				Name: "a_remap",
 				BuildSettingDefault: "//bazelifyrc_remap:nrfbazelify_empty_remap",
