@@ -169,8 +169,8 @@ func (b *buildGen) outputFiles() error {
 	for _, lib := range r.Libraries() {
 		files[b.sdkDir].AddLibrary(lib)
 	}
-	for _, labelAttr := range r.LabelAttrs() {
-		files[b.sdkDir].AddLabelAttr(labelAttr)
+	for _, labelSetting := range r.LabelSettings() {
+		files[b.sdkDir].AddLabelSetting(labelSetting)
 	}
 	if err := ioutil.WriteFile(filepath.Join(b.sdkDir, bzlFilename), r.BzlContents(), 0644); err != nil {
 		return err

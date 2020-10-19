@@ -20,7 +20,7 @@ type File struct {
 	Path string
 	loads []*Load
 	libs []*Library
-	labelAttrs []*LabelAttr
+	labelSettings []*LabelSetting
 	packageVisibility string
 }
 
@@ -42,7 +42,7 @@ func (f *File) Generate() string {
 	}
 
 	// Add default visibility
-	out += fmt.Sprintf("package(default_visibility=%q)\n", f.packageVisibility)
+	out += fmt.Sprintf("package(default_visibility=[%q])\n", f.packageVisibility)
 
 	// Generate all libraries
 	sort.Slice(f.libs, func(i, j int) bool {
@@ -52,12 +52,12 @@ func (f *File) Generate() string {
 		out += lib.Generate() + "\n"
 	}
 
-	// Generate all label_attrs
-	sort.Slice(f.labelAttrs, func(i, j int) bool {
-		return f.labelAttrs[i].Name < f.labelAttrs[j].Name
+	// Generate all label_settings
+	sort.Slice(f.labelSettings, func(i, j int) bool {
+		return f.labelSettings[i].Name < f.labelSettings[j].Name
 	})
-	for _, labelAttr := range f.labelAttrs {
-		out += labelAttr.Generate() + "\n"
+	for _, labelSetting := range f.labelSettings {
+		out += labelSetting.Generate() + "\n"
 	}
 
 	return out
@@ -73,9 +73,9 @@ func (f *File) AddLibrary(lib *Library) {
 	f.libs = append(f.libs, lib)
 }
 
-// AddLabelAttr adds a label attr to this file.
-func (f *File) AddLabelAttr(labelAttr *LabelAttr) {
-	f.labelAttrs = append(f.labelAttrs, labelAttr)
+// AddLabelSetting adds a label_setting to this file.
+func (f *File) AddLabelSetting(labelSetting *LabelSetting) {
+	f.labelSettings = append(f.labelSettings, labelSetting)
 }
 
 // Library contains the information needed to generate a cc_library rule.
@@ -108,15 +108,15 @@ func (l *Library) Generate() string {
 
 }
 
-// LabelAttr represents a label_attr rule.
-type LabelAttr struct {
+// LabelSetting represents a label_setting rule.
+type LabelSetting struct {
 	Name string
 	BuildSettingDefault string
 }
 
-// Generate generates the output format of this label_attr.
-func (l *LabelAttr) Generate() string {
-	return fmt.Sprintf("label_attr(name=%q, build_setting_default=%q)", l.Name, l.BuildSettingDefault)
+// Generate generates the output format of this label_setting.
+func (l *LabelSetting) Generate() string {
+	return fmt.Sprintf("label_setting(name=%q, build_setting_default=%q)", l.Name, l.BuildSettingDefault)
 }
 
 // Load represents a load() statement.
