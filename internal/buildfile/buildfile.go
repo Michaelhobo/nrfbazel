@@ -33,9 +33,6 @@ func (f *File) Write() error {
 func (f *File) Generate() string {
 	var out string
 
-	// Add default visibility
-	out += fmt.Sprintf("package(default_visibility=%q)\n", f.packageVisibility)
-
 	// Generate load statements
 	sort.Slice(f.loads, func(i, j int) bool{
 		return f.loads[i].Source < f.loads[j].Source
@@ -43,6 +40,9 @@ func (f *File) Generate() string {
 	for _, load := range f.loads {
 		out += load.Generate() + "\n"
 	}
+
+	// Add default visibility
+	out += fmt.Sprintf("package(default_visibility=%q)\n", f.packageVisibility)
 
 	// Generate all libraries
 	sort.Slice(f.libs, func(i, j int) bool {
