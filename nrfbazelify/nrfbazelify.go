@@ -158,6 +158,10 @@ func (b *buildGen) outputFiles() error {
 		return err
 	}
 	files[b.sdkDir] = buildfile.New(b.sdkDir)
+	files[b.sdkDir].AddLoad(&buildfile.Load{
+		Source: "@rules_cc//cc:defs.bzl",
+		Symbols: []string{"cc_library"},
+	})
 	r := remap.New(b.rc.GetRemaps(), sdkFromWorkspace)
 	for _, lib := range r.Libraries() {
 		files[b.sdkDir].AddLibrary(lib)
@@ -189,6 +193,10 @@ func (b *buildGen) outputFiles() error {
 			// Find or create a new BUILD file, and add our library to it.
 			if file := files[target.dir]; file == nil {
 				files[target.dir] = buildfile.New(target.dir)
+				files[target.dir].AddLoad(&buildfile.Load{
+					Source: "@rules_cc//cc:defs.bzl",
+					Symbols: []string{"cc_library"},
+				})
 			}
 			files[target.dir].AddLibrary(&buildfile.Library{
 				Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
