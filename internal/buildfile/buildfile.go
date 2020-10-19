@@ -63,6 +63,11 @@ func (f *File) Generate() string {
 	return out
 }
 
+// AddLoad adds a load statement to this file.
+func (f *File) AddLoad(load *Load) {
+	f.loads = append(f.loads, load)
+}
+
 // AddLibrary adds a library to this file.
 func (f *File) AddLibrary(lib *Library) {
 	f.libs = append(f.libs, lib)

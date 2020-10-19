@@ -30,6 +30,10 @@ func mustMakeAbs(t *testing.T, dir string) string {
 
 func newBuildFile(dir string, libs []*buildfile.Library, labelAttrs []*buildfile.LabelAttr) *buildfile.File {
 	out := buildfile.New(dir)
+	out.AddLoad(&buildfile.Load{
+		Source: "@rules_cc//cc:defs.bzl",
+		Symbols: []string{"cc_library"},
+	})
 	for _, lib := range libs {
 		out.AddLibrary(lib)
 	}
