@@ -10,16 +10,16 @@ import (
 )
 
 const (
-	emptyRemap = "nrfbazelify_empty_remap"
+  emptyRemap = "nrfbazelify_empty_remap"
 
-	header = `
+  header = `
 """ This allows performing remapping of library dependencies based on the
 nrf_cc_binary that includes the library.
 """
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 `
 
-	remapTransition = `
+  remapTransition = `
 def _remap_transition_impl(settings, attr):
   return {
 %s
@@ -33,12 +33,12 @@ _remap_transition = transition(
   ],
 )
 `
-	// A single line in the return statement in remapTransition.
-	remapTransitionReturn = "    %q: attr.%s,\n"
-	// A single line in the outputs in remapTransition.
-	remapTransitionOutput = "    %q,\n"
+  // A single line in the return statement in remapTransition.
+  remapTransitionReturn = "    %q: attr.%s,\n"
+  // A single line in the outputs in remapTransition.
+  remapTransitionOutput = "    %q,\n"
 
-	remapRule = `
+  remapRule = `
 # All this does is copy the cc_binary's output to its own output and propagate
 # its runfiles and executable so "bazel run" works.
 def _remap_rule_impl(ctx):
@@ -72,10 +72,10 @@ _remap_rule = rule(
   executable = True,
 )
 `
-	// A single line of the attrs block in remapRule.
-	remapRuleAttr = "    %q: attr.label(),\n"
+  // A single line of the attrs block in remapRule.
+  remapRuleAttr = "    %q: attr.label(),\n"
 
-	nrfCCBinary = `
+  nrfCCBinary = `
 # Convenience macro: this instantiates a transition_rule with the given
 # desired features, instantiates a cc_binary as a dependency of that rule,
 # and fills out the cc_binary with all other parameters passed to this macro.
@@ -98,118 +98,118 @@ def nrf_cc_binary(name, remap = None, **kwargs):
     **kwargs
   )
 `
-	// A single line of the _remap_rule block in nrfCCBinary.
-	nrfCCBinaryRemapRule = "    %s = remap.get(%q, %q),\n"
+  // A single line of the _remap_rule block in nrfCCBinary.
+  nrfCCBinaryRemapRule = "    %s = remap.get(%q, %q),\n"
 )
 
 // New creates a new remap from a list of header files from
 // bazelifyrc.Configuration's remaps field.
 // sdkFromWorkspace is the relative path from sdkDir to workspaceDir.
 func New(headers []string, sdkFromWorkspace string) *Remaps {
-	var libs []*buildfile.Library
-	if len(headers) != 0 {
-		libs = append(libs, &buildfile.Library{Name: emptyRemap})
-	}
-	var labelSettings []*buildfile.LabelSetting
-	var remaps []*processed
-	for _, header := range headers {
-		shortName := strings.TrimSuffix(header, filepath.Ext(header))
-		remapName := fmt.Sprintf("%s_remap", shortName)
-		buildSettingDefault := fmt.Sprintf("//%s:%s", sdkFromWorkspace, emptyRemap)
-		labelSettings = append(labelSettings, &buildfile.LabelSetting{
-			Name: remapName,
-			BuildSettingDefault: buildSettingDefault,
-		})
-		label := fmt.Sprintf("//%s", sdkFromWorkspace)
-		if filepath.Base(sdkFromWorkspace) != remapName {
-			label += fmt.Sprintf(":%s", remapName)
-		}
-		remaps = append(remaps, &processed{
-			header: header,
-			shortName: shortName,
-			label: label,
-			buildSettingDefault: buildSettingDefault,
-		})
-	}
+  var libs []*buildfile.Library
+  if len(headers) != 0 {
+    libs = append(libs, &buildfile.Library{Name: emptyRemap})
+  }
+  var labelSettings []*buildfile.LabelSetting
+  var remaps []*processed
+  for _, header := range headers {
+    shortName := strings.TrimSuffix(header, filepath.Ext(header))
+    remapName := fmt.Sprintf("%s_remap", shortName)
+    buildSettingDefault := fmt.Sprintf("//%s:%s", sdkFromWorkspace, emptyRemap)
+    labelSettings = append(labelSettings, &buildfile.LabelSetting{
+      Name: remapName,
+      BuildSettingDefault: buildSettingDefault,
+    })
+    label := fmt.Sprintf("//%s", sdkFromWorkspace)
+    if filepath.Base(sdkFromWorkspace) != remapName {
+      label += fmt.Sprintf(":%s", remapName)
+    }
+    remaps = append(remaps, &processed{
+      header: header,
+      shortName: shortName,
+      label: label,
+      buildSettingDefault: buildSettingDefault,
+    })
+  }
 
-	bzlContents := header
-	bzlContents += generateRemapTransition(remaps)
-	bzlContents += generateRemapRule(remaps)
-	bzlContents += generateNrfCCBinary(remaps)
+  bzlContents := header
+  bzlContents += generateRemapTransition(remaps)
+  bzlContents += generateRemapRule(remaps)
+  bzlContents += generateNrfCCBinary(remaps)
 
-	return &Remaps{
-		libs: libs,
-		labelSettings: labelSettings,
-		bzlContents: []byte(bzlContents),
-	}
+  return &Remaps{
+    libs: libs,
+    labelSettings: labelSettings,
+    bzlContents: []byte(bzlContents),
+  }
 }
 
 // GenerateLabel generates the label for remapping the header.
 func GenerateLabel(header string, sdkFromWorkspace string) string {
-	shortName := strings.TrimSuffix(header, filepath.Ext(header))
-	remapName := fmt.Sprintf("%s_remap", shortName)
-	label := fmt.Sprintf("//%s", sdkFromWorkspace)
-	if filepath.Base(sdkFromWorkspace) != remapName {
-		label += fmt.Sprintf(":%s", remapName)
-	}	
-	return label
+  shortName := strings.TrimSuffix(header, filepath.Ext(header))
+  remapName := fmt.Sprintf("%s_remap", shortName)
+  label := fmt.Sprintf("//%s", sdkFromWorkspace)
+  if filepath.Base(sdkFromWorkspace) != remapName {
+    label += fmt.Sprintf(":%s", remapName)
+  }	
+  return label
 }
 
 type processed struct {
-	// The original header name
-	header string
-	// The name of the file without the extension
-	shortName string
-	// The name of the remap label, which is //sdk_dir:short_name_remap
-	label string
-	// If no default is provided, the build setting default label to use.
-	buildSettingDefault string
+  // The original header name
+  header string
+  // The name of the file without the extension
+  shortName string
+  // The name of the remap label, which is //sdk_dir:short_name_remap
+  label string
+  // If no default is provided, the build setting default label to use.
+  buildSettingDefault string
 }
 
 func generateRemapTransition(remaps []*processed) string {
-	var returns string
-	var outputs string
-	for _, remap := range remaps {
-		returns += fmt.Sprintf(remapTransitionReturn, remap.label, remap.shortName)
-		outputs += fmt.Sprintf(remapTransitionOutput, remap.label)
-	}
-	return fmt.Sprintf(remapTransition, returns, outputs)
+  var returns string
+  var outputs string
+  for _, remap := range remaps {
+    returns += fmt.Sprintf(remapTransitionReturn, remap.label, remap.shortName)
+    outputs += fmt.Sprintf(remapTransitionOutput, remap.label)
+  }
+  return fmt.Sprintf(remapTransition, returns, outputs)
 }
 
 func generateRemapRule(remaps []*processed) string {
-	var attrs string
-	for _, remap := range remaps {
-		attrs += fmt.Sprintf(remapRuleAttr, remap.shortName)
-	}
-	return fmt.Sprintf(remapRule, attrs)
+  var attrs string
+  for _, remap := range remaps {
+    attrs += fmt.Sprintf(remapRuleAttr, remap.shortName)
+  }
+  return fmt.Sprintf(remapRule, attrs)
 }
 
 func generateNrfCCBinary(remaps []*processed) string {
-	var remapRules string
-	for _, remap := range remaps {
-		remapRules += fmt.Sprintf(nrfCCBinaryRemapRule, remap.shortName, remap.header, remap.buildSettingDefault)
-	}
-	return fmt.Sprintf(nrfCCBinary, remapRules)
+  var remapRules string
+  for _, remap := range remaps {
+    remapRules += fmt.Sprintf(nrfCCBinaryRemapRule, remap.shortName, remap.header, remap.buildSettingDefault)
+  }
+  return fmt.Sprintf(nrfCCBinary, remapRules)
 }
 
 // Remaps holds data for remapping header files dynamically.
 type Remaps struct {
-	libs []*buildfile.Library
-	labelSettings []*buildfile.LabelSetting
-	bzlContents []byte
+  libs []*buildfile.Library
+  labelSettings []*buildfile.LabelSetting
+  bzlContents []byte
 }
 
 // Libraries returns the libraries that need to be created.
 func (r *Remaps) Libraries() []*buildfile.Library {
-	return r.libs
+  return r.libs
 }
 
 // LabelSettings returns the label_attr rules that need to be created.
 func (r *Remaps) LabelSettings() []*buildfile.LabelSetting {
-	return r.labelSettings
+  return r.labelSettings
 }
 
 // BzlContents returns the .bzl file's contents.
 func (r *Remaps) BzlContents() []byte {
-	return r.bzlContents
+  return r.bzlContents
 }
