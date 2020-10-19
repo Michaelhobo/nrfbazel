@@ -24,4 +24,20 @@ message Configuration {
   // Each include_dir is relative to the SDk directory.
   // All include_dirs must be within the workspace.
   repeated string include_dirs = 4;
+  // Remaps header files to a customizable field in nrf_cc_binary rules.
+  // cc_library rules that include the given headers will depend on a custom
+  // rule which will be automatically populated at compile time based on the
+  // settings in the nrf_cc_binary rule.
+  // To set the value of the remapped rule, nrf_cc_binary has a remap field,
+  // where you specify what each header remaps to.
+  // For example:
+  // nrf_cc_binary(
+  //   name = "something",
+  //   remap = {
+  //     "sdk_config.h": ":my_sdk_config",
+  //   },
+  // )
+  // Then, all includes that depend on sdk_config.h will be built with the
+  // sdk_config.h header file set to ":my_sdk_config".
+  repeated string remaps = 5;
 }

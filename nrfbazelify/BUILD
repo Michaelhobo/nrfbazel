@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//bazelifyrc:bazelifyrc_go_proto",
         "//internal/buildfile",
+        "//internal/remap",
         "@com_github_golang_protobuf//proto:go_default_library",
     ],
 )
