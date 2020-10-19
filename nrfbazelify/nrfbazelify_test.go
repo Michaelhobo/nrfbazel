@@ -571,3 +571,18 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateBuildFiles_RemovesStaleHint(t *testing.T) {
+	workspaceDir := mustMakeAbs(t, testDataDir)
+	sdkDir := filepath.Join(workspaceDir, "removes_stale_hint")
+	t.Cleanup(func() {
+		removeAllBuildFiles(t, sdkDir)
+	})
+	if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
+		t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+	}
+	hintFile := filepath.Join(sdkDir, ".bazelifyrc.hint")
+	if _, err := os.Stat(hintFile); err == nil {
+		t.Errorf("hint file %q not removed after successful run", hintFile)
+	}
+}

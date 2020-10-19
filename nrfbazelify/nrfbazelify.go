@@ -75,6 +75,9 @@ func (b *buildGen) generate() error {
 	if err := b.outputFiles(); err != nil {
 		return fmt.Errorf("failed to output BUILD files: %v", err)
 	}
+	if err := b.removeStaleHint(); err != nil {
+		return fmt.Errorf("failed to remove stale hint file: %v", err)
+	}
 	return nil
 }
 
@@ -521,4 +524,12 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
 		return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v%s", err, verboseText)
 	}
 	return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s%s", rcPath, rcHintPath, verboseText)
+}
+
+func (b *buildGen) removeStaleHint() error {
+	hintFile := filepath.Join(b.sdkDir, ".bazelifyrc.hint")
+	if _, err := os.Stat(hintFile); err != nil {
+		return nil
+	}
+	return os.Remove(hintFile)
 }
