@@ -178,36 +178,37 @@ func (b *buildGen) outputFiles() error {
 
   // Loop through each target, and add the library to the given file
   for _, config := range b.targets {
-    target := config.possible[0]
-    var deps []string
-    for _, include := range target.includes {
-      deps = append(deps, b.targetFromInclude(include, target.dir))
-    }
-    for _, resolved := range target.resolvedTargets {
-      deps = append(deps, resolved)
-    }
-    
-    // Sort the srcs, hdrs, and deps so output has a deterministic order.
-    // This is especially useful for tests.
-    sort.Strings(target.srcs)
-    sort.Strings(target.hdrs)
-    sort.Strings(deps)
-
-    // Find or create a new BUILD file, and add our library to it.
-    if file := files[target.dir]; file == nil {
-      files[target.dir] = buildfile.New(target.dir)
-      files[target.dir].AddLoad(&buildfile.Load{
-        Source: "@rules_cc//cc:defs.bzl",
-        Symbols: []string{"cc_library"},
+    for _, target := range config.possible {
+      var deps []string
+      for _, include := range target.includes {
+        deps = append(deps, b.targetFromInclude(include, target.dir))
+      }
+      for _, resolved := range target.resolvedTargets {
+        deps = append(deps, resolved)
+      }
+      
+      // Sort the srcs, hdrs, and deps so output has a deterministic order.
+      // This is especially useful for tests.
+      sort.Strings(target.srcs)
+      sort.Strings(target.hdrs)
+      sort.Strings(deps)
+   
+      // Find or create a new BUILD file, and add our library to it.
+      if file := files[target.dir]; file == nil {
+        files[target.dir] = buildfile.New(target.dir)
+        files[target.dir].AddLoad(&buildfile.Load{
+          Source: "@rules_cc//cc:defs.bzl",
+          Symbols: []string{"cc_library"},
+        })
+      }
+      files[target.dir].AddLibrary(&buildfile.Library{
+        Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
+        Srcs:     target.srcs,
+        Hdrs:     target.hdrs,
+        Deps:     deps,
+        Includes: []string{"."},
       })
     }
-    files[target.dir].AddLibrary(&buildfile.Library{
-      Name:     strings.TrimSuffix(target.hdrs[0], ".h"),
-      Srcs:     target.srcs,
-      Hdrs:     target.hdrs,
-      Deps:     deps,
-      Includes: []string{"."},
-    })
   }
 
   // Write all BUILD files to disk.
