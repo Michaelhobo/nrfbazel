@@ -19,7 +19,7 @@ import (
 	"github.com/Michaelhobo/nrfbazel/internal/remap"
 	"github.com/golang/protobuf/proto"
 
-	"github.com/Michaelhobo/nrfbazel/bazelifyrc"
+	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
 )
 
 const (

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Michaelhobo/nrfbazel/bazelifyrc"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
