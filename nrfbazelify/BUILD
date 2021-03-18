@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/Michaelhobo/nrfbazel/nrfbazelify",
     visibility = ["//visibility:public"],
     deps = [
-        "//bazelifyrc:bazelifyrc_go_proto",
         "//internal/buildfile",
         "//internal/remap",
+        "//proto/bazelifyrc:bazelifyrc_go_proto",
         "@com_github_golang_protobuf//proto:go_default_library",
     ],
 )
@@ -19,8 +19,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":go_default_library"],
     deps = [
-        "//bazelifyrc:bazelifyrc_go_proto",
         "//internal/buildfile",
+        "//proto/bazelifyrc:bazelifyrc_go_proto",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_google_go_cmp//cmp:go_default_library",
         "@org_golang_google_protobuf//testing/protocmp:go_default_library",
