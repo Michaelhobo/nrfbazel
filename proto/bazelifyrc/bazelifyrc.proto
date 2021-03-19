@@ -40,4 +40,18 @@ message Configuration {
   // Then, all includes that depend on sdk_config.h will be built with the
   // sdk_config.h header file set to ":my_sdk_config".
   repeated string remaps = 5;
+  // Source sets allow you to specify sets of files that should be grouped
+  // in the same cc_library rule.
+  repeated SourceSet source_sets = 6;
+}
+
+message SourceSet {
+  // The name of the generated cc_library rule.
+  string name = 1;
+  // The directory to put the cc_library rule.
+  string dir = 2;
+  // The contents of the srcs field to cc_library.
+  repeated string srcs = 3;
+  // The contents of the hdrs field to cc_library.
+  repeated string hdrs = 4;
 }

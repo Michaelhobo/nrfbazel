@@ -586,3 +586,34 @@ func TestGenerateBuildFiles_RemovesStaleHint(t *testing.T) {
     t.Errorf("hint file %q not removed after successful run", hintFile)
   }
 }
+
+func TestGeneratedBuildFiles_SourceSets(t *testing.T) {
+  workspaceDir := mustMakeAbs(t, testDataDir)
+  sdkDir := filepath.Join(workspaceDir, "source_sets")
+  t.Cleanup(func() {
+    removeAllBuildFiles(t, sdkDir)
+  })
+  if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
+    t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
+  }
+  checkBuildFiles(t,
+    newBuildFile(sdkDir, []*buildfile.Library{
+      {
+        Name:     "ab",
+				Hdrs:     []string{"a.h", "b.h"},
+				Srcs:     []string{"b.c"},
+        Includes: []string{"."},
+        Deps: []string{
+          "//source_sets/dir:c",
+        },
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
+      {
+        Name:     "c",
+        Hdrs:     []string{"c.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+  )
+}
