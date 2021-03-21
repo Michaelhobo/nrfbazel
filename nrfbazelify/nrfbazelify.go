@@ -17,7 +17,10 @@ import (
 
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/Michaelhobo/nrfbazel/internal/remap"
-	"github.com/golang/protobuf/proto"
+  "google.golang.org/protobuf/proto"
+  "google.golang.org/protobuf/encoding/prototext"
+	"gonum.org/v1/gonum/graph/simple"
+	"gonum.org/v1/gonum/graph"
 
 	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
 )
@@ -27,6 +30,8 @@ const (
   rcFilename = ".bazelifyrc"
   // We write the contents of our remap features to this file.
   bzlFilename = "remap.bzl"
+	// This is the directory, relative from the SDK root, for group rules.
+	groupRuleDir = "group_rules"
 )
 
 var includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
@@ -50,6 +55,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
     sdkDir:       filepath.Clean(sdkDir),
     targets:      make(map[string]*possibleTargets),
     sourceSets:   make(map[string]map[string]string),
+		ruleGraph: simple.NewDirectedGraph(),
   }
   return gen.generate()
 }
@@ -58,9 +64,10 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
 type buildGen struct {
   // These are pre-cleaned by GenerateBuildFiles
   workspaceDir, sdkDir string
-  verbose bool
+  verbose							 bool
   targets              map[string]*possibleTargets // include name -> all possible targets
   sourceSets           map[string]map[string]string // dir (sdk-relative) -> header name -> target label
+	ruleGraph 			     *simple.DirectedGraph
   // Additional targets that need dependencies resolved, but the library itself is already set.
   sourceSetTargets     []*sourceSetTarget
   rc                   *bazelifyrc.Configuration
@@ -79,6 +86,9 @@ func (b *buildGen) generate() error {
   if err := b.checkResolvable(); err != nil {
     return fmt.Errorf("failed to resolve targets: %v", err)
   }
+	if err := b.mergeCyclicDeps(); err != nil {
+		return fmt.Errorf("failed to merge cyclic deps: %v", err)
+	}
   if err := b.outputFiles(); err != nil {
     return fmt.Errorf("failed to output BUILD files: %v", err)
   }
@@ -98,10 +108,10 @@ func (b *buildGen) loadBazelifyRC() error {
   }
   rcData, err := ioutil.ReadFile(rcPath)
   if err != nil {
-    return fmt.Errorf("Could not read %s: %v", rcFilename, err)
+    return fmt.Errorf("could not read %s: %v", rcFilename, err)
   }
   var rc bazelifyrc.Configuration
-  if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
+  if err := prototext.Unmarshal(rcData, &rc); err != nil {
     return err
   }
   b.rc = &rc
@@ -198,6 +208,102 @@ func (b *buildGen) checkResolvable() error {
   return nil
 }
 
+func (b *buildGen) mergeCyclicDeps() error {
+	nodeID := int64(0)
+	nodes := make(map[string]*ruleNode) // target name -> node
+	// Add all targets as nodes
+	for _, target := range b.targets {
+		nodeID++
+		node, err := b.newRuleNode(nodeID, target)
+		if err != nil {
+			return err
+		}
+		b.ruleGraph.AddNode(node)
+		nodes[node.label] = node
+	}
+	// Add all requirements as edges
+	for _, dst := range nodes {
+		for _, requiredBy := range dst.requiredBy {
+			src := nodes[requiredBy]
+			if src == nil {
+				return fmt.Errorf("%q not found in graph nodes", requiredBy)
+			}
+			b.ruleGraph.NewEdge(src, dst)
+			if b.ruleGraph.HasEdgeFromTo(dst.ID(), src.ID()) {
+				cyclicEdges, cyclicNodes := b.findCyclicDeps(&edge{
+					src: src,
+					dst: dst,
+				})
+				for _, edge := range cyclicEdges {
+					b.ruleGraph.RemoveEdge(edge.src.ID(), edge.dst.ID())
+				}
+				var groupNodes []*ruleNode
+				for _, node := range cyclicNodes {
+					if node.isGroup {
+						groupNodes = append(groupNodes, node)
+					}
+				}
+				if len(groupNodes) == 0 {
+					nodeID++
+					groupNode := &ruleNode{
+						id: nodeID,
+						label: 
+					}
+					b.ruleGraph.AddNode(groupNode)
+				}
+			}
+		}
+	}
+	
+	// 
+	return nil
+}
+
+type edge struct {
+	src, dst *ruleNode
+}
+
+func (b *buildGen) findCyclicDeps(added *edge) ([]*edge, []*ruleNode) {
+
+}
+
+func (b *buildGen) newRuleNode(nodeID int64, target *possibleTargets) (*ruleNode, error) {
+	if target.override != "" {
+		return &ruleNode{
+			id: nodeID,
+			label: target.override,
+			requiredBy: target.requiredBy,
+		}, nil
+	}
+
+	label := b.formatTarget(target, "")
+			if got, want := len(target.possible), 1; got != want {
+				return nil, fmt.Errorf("target %q has %d possible targets, expected %d", label, got, want)
+			}
+			return &ruleNode{
+				id: nodeID,
+				label:label,
+				requiredBy: target.requiredBy,
+				targetInfo: target.possible[0],
+			}, nil
+}
+
+type ruleNode struct {
+	id int64
+
+	label string
+	requiredBy []string
+	isGroup bool
+	// targetInfo is optional.
+	// If not supplied, no BUILD rule will be written,
+	// but the node will still exist to help with graph resolution.
+	targetInfo *targetInfo
+}
+
+func (r *ruleNode) ID() int64 {
+	return r.id
+}
+
 func (b *buildGen) outputFiles() error {
   files := make(map[string]*buildfile.File) // target directory -> BUILD file
 
@@ -254,9 +360,7 @@ func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[st
   for _, include := range target.includes {
     deps = append(deps, b.targetFromInclude(include, dir))
   }
-  for _, resolved := range target.resolvedTargets {
-    deps = append(deps, resolved)
-  }
+	deps = append(deps, target.resolvedTargets...)
   
   // Sort the srcs, hdrs, and deps so output has a deterministic order.
   // This is especially useful for tests.
@@ -671,14 +775,17 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
     }
     rc.GetTargetOverrides()[name] = b.formatTarget(possible, "")
   }
-  rcText := proto.MarshalTextString(rc)
+  rcText, err := prototext.Marshal(rc)
+	if err != nil {
+		log.Fatalf("prototext.Marshal: %v", err)
+	}
   rcPath := filepath.Join(b.sdkDir, rcFilename)
   rcHintPath := rcPath + ".hint"
   verboseText := ""
   if b.verbose {
     verboseText = fmt.Sprintf("\n.bazelifyrc.hint contents:\n%s", rcText)
   }
-  if err := ioutil.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
+  if err := ioutil.WriteFile(rcHintPath, rcText, 0640); err != nil {
     return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v%s", err, verboseText)
   }
   return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s%s", rcPath, rcHintPath, verboseText)
