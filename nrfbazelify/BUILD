@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/Michaelhobo/nrfbazel/nrfbazelify",
     visibility = ["//visibility:public"],
     deps = [
+        "//internal/bazel:go_default_library",
         "//internal/buildfile",
         "//internal/remap",
         "//proto/bazelifyrc:bazelifyrc_go_proto",

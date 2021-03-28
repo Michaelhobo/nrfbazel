@@ -279,7 +279,7 @@ func TestGenerateBuildFiles_BazelifyRCHintKeepOverride(t *testing.T) {
   if diff := cmp.Diff(&bazelifyrc.Configuration{
     TargetOverrides: map[string]string{
       "overridden.h": "//something",
-      "doesnotexist.h": "REQUIRED BY <SDK>/exists.h PLEASE RESOLVE: ",
+      "doesnotexist.h": "REQUIRED BY //bazelifyrc_hint_keep_override:exists PLEASE RESOLVE: ",
     },
   }, hint, protocmp.Transform()); diff != "" {
     t.Fatalf("bazelifyrc hint (-want +got): %s", diff)
@@ -531,8 +531,8 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
         Hdrs:     []string{"c.h"},
         Includes: []string{"."},
         Deps:     []string{
-          "//bazelifyrc_remap:a_remap",
-          "//bazelifyrc_remap:b_remap",
+          ":a_remap",
+          ":b_remap",
         },
       },
     }, []*buildfile.LabelSetting{

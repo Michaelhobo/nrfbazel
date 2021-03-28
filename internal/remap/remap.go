@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 )
 
@@ -145,14 +146,10 @@ func New(headers []string, sdkFromWorkspace string) *Remaps {
 }
 
 // GenerateLabel generates the label for remapping the header.
-func GenerateLabel(header string, sdkFromWorkspace string) string {
+func GenerateLabel(header string, sdkDir string, workspaceDir string) (*bazel.Label, error) {
   shortName := strings.TrimSuffix(header, filepath.Ext(header))
   remapName := fmt.Sprintf("%s_remap", shortName)
-  label := fmt.Sprintf("//%s", sdkFromWorkspace)
-  if filepath.Base(sdkFromWorkspace) != remapName {
-    label += fmt.Sprintf(":%s", remapName)
-  }	
-  return label
+	return bazel.NewLabel(sdkDir, remapName, workspaceDir)
 }
 
 type processed struct {

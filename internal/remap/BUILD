@@ -5,5 +5,8 @@ go_library(
     srcs = ["remap.go"],
     importpath = "github.com/Michaelhobo/nrfbazel/internal/remap",
     visibility = ["//nrfbazelify:__subpackages__"],
-    deps = ["//internal/buildfile"],
+    deps = [
+        "//internal/bazel:go_default_library",
+        "//internal/buildfile",
+    ],
 )

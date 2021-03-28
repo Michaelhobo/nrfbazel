@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/Michaelhobo/nrfbazel/internal/remap"
 	"github.com/golang/protobuf/proto"
@@ -49,7 +50,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
     verbose: 			verbose,
     sdkDir:       filepath.Clean(sdkDir),
     targets:      make(map[string]*possibleTargets),
-    sourceSets:   make(map[string]map[string]string),
+    sourceSets:   make(map[string]map[string]*bazel.Label),
   }
   return gen.generate()
 }
@@ -60,7 +61,7 @@ type buildGen struct {
   workspaceDir, sdkDir string
   verbose bool
   targets              map[string]*possibleTargets // include name -> all possible targets
-  sourceSets           map[string]map[string]string // dir (sdk-relative) -> header name -> target label
+  sourceSets           map[string]map[string]*bazel.Label // dir (sdk-relative) -> header name -> target label
   // Additional targets that need dependencies resolved, but the library itself is already set.
   sourceSetTargets     []*sourceSetTarget
   rc                   *bazelifyrc.Configuration
@@ -98,7 +99,7 @@ func (b *buildGen) loadBazelifyRC() error {
   }
   rcData, err := ioutil.ReadFile(rcPath)
   if err != nil {
-    return fmt.Errorf("Could not read %s: %v", rcFilename, err)
+    return fmt.Errorf("could not read %s: %v", rcFilename, err)
   }
   var rc bazelifyrc.Configuration
   if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
@@ -109,13 +110,13 @@ func (b *buildGen) loadBazelifyRC() error {
     if b.targets[name] != nil {
       return fmt.Errorf("duplicate target override for %q in %s", name, rcFilename)
     }
-    b.targets[name] = &possibleTargets{
-      override: override,
+    overrideLabel, err := bazel.ParseLabel(override)
+    if err != nil {
+      return fmt.Errorf("bazel.ParseLabel(%q): %v", override, err)
     }
-  }
-  sdkFromWorkspace, err := filepath.Rel(b.workspaceDir, b.sdkDir)
-  if err != nil {
-    return err
+    b.targets[name] = &possibleTargets{
+      override: overrideLabel,
+    }
   }
   for _, r := range rc.GetRemaps() {
     if filepath.Ext(r) != ".h" {
@@ -124,8 +125,12 @@ func (b *buildGen) loadBazelifyRC() error {
     if b.targets[r] == nil {
       b.targets[r] = &possibleTargets{}
     }
-    if b.targets[r].override == "" {
-      b.targets[r].override = remap.GenerateLabel(r, sdkFromWorkspace)
+    if b.targets[r].override == nil {
+      remapLabel, err := remap.GenerateLabel(r, b.sdkDir, b.workspaceDir)
+      if err != nil {
+        return fmt.Errorf("remap.GenerateLabel(%q, %q, %q): %v", r, b.sdkDir, b.workspaceDir, err)
+      }
+      b.targets[r].override = remapLabel
     }
   }
   // Build the sourceSets map for searching for targets.
@@ -137,7 +142,7 @@ func (b *buildGen) loadBazelifyRC() error {
       sourceSet.Dir = "."
     }
     if b.sourceSets[sourceSet.GetDir()] == nil {
-      b.sourceSets[sourceSet.GetDir()] = make(map[string]string)
+      b.sourceSets[sourceSet.GetDir()] = make(map[string]*bazel.Label)
     }
     target, err := b.absLabel(sourceSet.GetDir(), sourceSet.GetName())
     if err != nil {
@@ -157,27 +162,16 @@ func (b *buildGen) loadBazelifyRC() error {
 }
 
 // Generate an absolute label
-func (b *buildGen) absLabel(dirFromSDK, name string) (string, error) {
-  fullDir := filepath.Join(b.sdkDir, dirFromSDK)
-  dirFromWorkSpace, err := filepath.Rel(b.workspaceDir, fullDir)
-  if err != nil {
-    return "", err
-  }
-  if dirFromWorkSpace == "." {
-    dirFromWorkSpace = ""
-  }
-  target := fmt.Sprintf("//%s", dirFromWorkSpace)
-  if filepath.Base(dirFromSDK) != name {
-    target += fmt.Sprintf(":%s", name)
-  }
-  return target, nil
+func (b *buildGen) absLabel(dirFromSDK, name string) (*bazel.Label, error) {
+  absDir := filepath.Join(b.sdkDir, dirFromSDK)
+  return bazel.NewLabel(absDir, name, b.workspaceDir)
 }
 
 func (b *buildGen) checkResolvable() error {
   unresolved := make(map[string]*possibleTargets) // maps name -> possible targets
   for name, possibleTargets := range b.targets {
     // If there's a target override, then this is resolved.
-    if possibleTargets.override != "" {
+    if possibleTargets.override != nil {
       continue
     }
     // If there's only 1 possible target, then this can be resolved.
@@ -225,18 +219,16 @@ func (b *buildGen) outputFiles() error {
   // Loop through each target, and add the library to the given file
   for _, config := range b.targets {
     for _, target := range config.possible {
-      dir := target.dir
-      name := strings.TrimSuffix(target.hdrs[0], filepath.Ext(target.hdrs[0]))
-      if b.searchSourceSets(dir, target.hdrs[0]) != "" {
+      if b.searchSourceSets(filepath.Join(b.workspaceDir, target.label.Dir()), target.hdrs[0]) != nil {
         continue
       }
-      b.addLibrary(name, dir, target, files)
+      b.addLibrary(target, files)
     }
   }
 
   // Loop through the source set targets, which have already been resolved.
   for _, sourceSet := range b.sourceSetTargets {
-    b.addLibrary(sourceSet.name, sourceSet.dir, sourceSet.target, files)
+    b.addLibrary(sourceSet.target, files)
   }
 
   // Write all BUILD files to disk.
@@ -249,13 +241,18 @@ func (b *buildGen) outputFiles() error {
   return nil
 }
 
-func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[string]*buildfile.File) {
+func (b *buildGen) addLibrary(target *targetInfo, files map[string]*buildfile.File) {
   var deps []string
   for _, include := range target.includes {
-    deps = append(deps, b.targetFromInclude(include, dir))
+    depLabel, err := b.resolveIncludeLabel(include)
+    if err != nil {
+      deps = append(deps, err.Error())
+    } else {
+      deps = append(deps, depLabel.RelativeTo(target.label))
+    }
   }
   for _, resolved := range target.resolvedTargets {
-    deps = append(deps, resolved)
+    deps = append(deps, resolved.RelativeTo(target.label))
   }
   
   // Sort the srcs, hdrs, and deps so output has a deterministic order.
@@ -265,16 +262,16 @@ func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[st
   sort.Strings(deps)
 
   // Find or create a new BUILD file, and add our library to it.
-  if file := files[target.dir]; file == nil {
-    files[dir] = buildfile.New(dir)
-    files[dir].AddLoad(&buildfile.Load{
+  if files[target.label.Dir()] == nil {
+    files[target.label.Dir()] = buildfile.New(filepath.Join(b.workspaceDir, target.label.Dir()))
+    files[target.label.Dir()].AddLoad(&buildfile.Load{
       Source: "@rules_cc//cc:defs.bzl",
       Symbols: []string{"cc_library"},
     })
   }
 
-  files[target.dir].AddLibrary(&buildfile.Library{
-    Name:     name,
+  files[target.label.Dir()].AddLibrary(&buildfile.Library{
+    Name:     target.label.Name(),
     Srcs:     target.srcs,
     Hdrs:     target.hdrs,
     Deps:     deps,
@@ -282,48 +279,37 @@ func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[st
   })
 }
 
-func (b *buildGen) targetFromInclude(include, ownDir string) string {
+func (b *buildGen) resolveIncludeLabel(include string) (*bazel.Label, error) {
   possibleTargets := b.targets[include]
   if possibleTargets == nil {
     // This should never happen since we do pre-processing. Just crash if it occurs.
     log.Fatalf("b.targets[%s] is nil, this should never happen!", include)
   }
-  if possibleTargets.override != "" {
-    return possibleTargets.override
+  if possibleTargets.override != nil {
+    return possibleTargets.override, nil
   }
   if got, want := len(possibleTargets.possible), 1; got != want {
     // This should never happen since we do pre-processing. Just crash if it occurs.
     log.Fatalf("len(b.targets[%s].possible)=%d, want %d", include, got, want)
   }
-  return b.formatTarget(possibleTargets, ownDir)
+  return b.resolveTargetLabel(possibleTargets)
 }
 
-// formatTarget formats the Bazel target.
-// If possibleTargets does not have an override or does not have exactly 1 possible target,
-// we will print a PLEASE RESOLVE in the output.
-func (b *buildGen) formatTarget(possibleTargets *possibleTargets, ownDir string) string {
-  var formatted []string
-  for _, possible := range possibleTargets.possible {
-    prefix := ""
-    suffix := ""
-    if possible.dir != ownDir {
-      prefix = fmt.Sprintf("/%s", strings.TrimPrefix(possible.dir, b.workspaceDir))
+// resolveTargetLabel resolves all possible targets and outputs the correct label.
+// If resolution can't happen, the error contains a message to show to the user.
+func (b *buildGen) resolveTargetLabel(possibleTargets *possibleTargets) (*bazel.Label, error) {
+  if len(possibleTargets.possible) != 1 {
+    var labels []*bazel.Label
+    for _, p := range possibleTargets.possible {
+      labels = append(labels, p.label)
     }
-
-    // If the target has a prefix of "//a/dir", and the target name is "dir",
-    // we can shorten "//a/dir:dir" to just "//a/dir"
-    targetName := strings.TrimSuffix(possible.hdrs[0], ".h")
-    targetDirName := filepath.Base(strings.TrimPrefix(prefix, "//"))
-    if targetDirName != targetName {
-      suffix = fmt.Sprintf(":%s", targetName)
+    var requiredByLabels []*bazel.Label
+    for _, requiredBy := range possibleTargets.requiredBy {
+      requiredByLabels = append(requiredByLabels, requiredBy)
     }
-    // Only populate the prefix with the directory if target is in a different directory.
-    formatted = append(formatted, fmt.Sprintf("%s%s", prefix, suffix))
+    return nil, fmt.Errorf("REQUIRED BY %s PLEASE RESOLVE: %s", bazel.JoinLabelStrings(requiredByLabels, ","), bazel.JoinLabelStrings(labels, "|"))
   }
-  if len(formatted) == 1 {
-    return formatted[0]
-  }
-  return fmt.Sprintf("REQUIRED BY %s PLEASE RESOLVE: %s", strings.Join(possibleTargets.requiredBy, ","), strings.Join(formatted, "|"))
+  return possibleTargets.possible[0].label, nil
 }
 
 // buildTargetsMap walks the nrf52 SDK tree, reads all source files,
@@ -370,28 +356,27 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
   }
 
   // If the file is in a source set, we delay processing to a later step.
-  if b.searchSourceSets(filepath.Dir(path), info.Name()) != "" {
+  if b.searchSourceSets(filepath.Dir(path), info.Name()) != nil {
     return nil
   }
 
   shortName := strings.TrimSuffix(info.Name(), ".h")
-  dirName := filepath.Dir(path)
+  label, err := bazel.NewLabel(filepath.Dir(path), shortName, b.workspaceDir)
+  if err != nil {
+    return fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", filepath.Dir(path), shortName, b.workspaceDir, err)
+  }
 
   hIncludes, err := b.readIncludes(path, info.Name())
   if err != nil {
     return fmt.Errorf("readIncludes(%s): %v", b.prettySDKPath(path), err)
   }
 
-  resolved, unresolved :=  b.splitResolvableIncludes(dirName, hIncludes)
+  resolved, unresolved := b.splitResolvableIncludes(label, hIncludes)
 
-  requiredBy := info.Name()
-  if b.verbose {
-    requiredBy = b.prettySDKPath(path)
-  }
-  b.populateIncludesInTargets(requiredBy, unresolved)
+  b.populateIncludesInTargets(label, unresolved)
 
   target := &targetInfo{
-    dir:             dirName,
+    label: label,
     hdrs:            []string{info.Name()},
     includes:        unresolved,
     resolvedTargets: resolved,
@@ -399,14 +384,16 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
 
   defer func() {
     if b.targets[info.Name()] == nil {
-      b.targets[info.Name()] = &possibleTargets{}
+      b.targets[info.Name()] = &possibleTargets{
+        requiredBy: make(map[string]*bazel.Label),
+      }
     }
     b.targets[info.Name()].possible = append(b.targets[info.Name()].possible, target)
   }()
 
   // TODO: expand to different types of implementation files.
   cFileName := fmt.Sprintf("%s.c", shortName)
-  cFilePath := filepath.Join(dirName, cFileName)
+  cFilePath := filepath.Join(label.Dir(), cFileName)
   cIncludes, err := b.readIncludes(cFilePath, info.Name())
   if err != nil {
     if b.verbose {
@@ -414,12 +401,8 @@ func (b *buildGen) buildTargetsMap(path string, info os.FileInfo, err error) err
     }
     return nil
   }
-  cResolved, cUnresolved := b.splitResolvableIncludes(dirName, cIncludes)
-  cRequiredBy := cFileName
-  if b.verbose {
-    cRequiredBy = b.prettySDKPath(cFilePath)
-  }
-  b.populateIncludesInTargets(cRequiredBy, cUnresolved)
+  cResolved, cUnresolved := b.splitResolvableIncludes(label, cIncludes)
+  b.populateIncludesInTargets(label, cUnresolved)
 
   target.includes = append(target.includes, cUnresolved...)
   target.resolvedTargets = append(target.resolvedTargets, cResolved...)
@@ -450,45 +433,43 @@ func (b *buildGen) walkSourceSets() error {
     for _, hdr := range sourceSet.GetHdrs() {
       files = append(files, filepath.Join(b.sdkDir, sourceSet.GetDir(), hdr))
     }
-    uniqueResolved := make(map[string]bool)
+    uniqueResolved := make(map[string]*bazel.Label)
     uniqueUnresolved := make(map[string]bool)
     for _, file := range files {
-      name := filepath.Base(file)
-      dirName := filepath.Dir(file)
       includes, err := b.readIncludes(file, "")
       if err != nil {
         return fmt.Errorf("readIncludes(%s): %v", file, err)
       }
-      resolved, unresolved := b.splitResolvableIncludes(dirName, includes)
+      resolved, unresolved := b.splitResolvableIncludes(ownLabel, includes)
       for _, r := range resolved {
         if r == ownLabel {
           continue
         }
-        uniqueResolved[r] = true
+        uniqueResolved[r.String()] = r
       }
       for _, u := range unresolved {
         uniqueUnresolved[u] = true
       }
-      requiredBy := name
-      if b.verbose {
-        requiredBy = b.prettySDKPath(file)
-      }
-      b.populateIncludesInTargets(requiredBy, unresolved)
+      b.populateIncludesInTargets(ownLabel, unresolved)
     }
     buildFileDir := filepath.Join(b.sdkDir, sourceSet.GetDir())
-    var resolved []string
-    for r := range uniqueResolved {
-      resolved = append(resolved, r)
+    var resolved []*bazel.Label
+    for _, label := range uniqueResolved {
+      resolved = append(resolved, label)
     }
     var unresolved []string
     for u := range uniqueUnresolved {
       unresolved = append(unresolved, u)
     }
+    label, err := bazel.NewLabel(buildFileDir, sourceSet.GetName(), b.workspaceDir)
+    if err != nil {
+      return fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", buildFileDir, sourceSet.GetName(), b.workspaceDir, err)
+    }
     b.sourceSetTargets = append(b.sourceSetTargets, &sourceSetTarget{
       dir: buildFileDir,
       name: sourceSet.GetName(),
       target: &targetInfo{
-        dir: buildFileDir,
+        label: label,
         hdrs: sourceSet.GetHdrs(),
         srcs: sourceSet.GetSrcs(),
         includes: unresolved,
@@ -501,11 +482,11 @@ func (b *buildGen) walkSourceSets() error {
 
 // Split includes that can be resolved early.
 // The remaining includes need to go through the dynamic resolution phase.
-func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resolved, unresolved []string) {
+func (b *buildGen) splitResolvableIncludes(ownLabel *bazel.Label, includes []string) (resolved []*bazel.Label, unresolved []string) {
   for _, include := range includes {
     // Start by looking for overridden targets
     if target := b.targets[include]; target != nil {
-      if target.override != "" {
+      if target.override != nil {
         resolved = append(resolved, target.override)
         continue
       }
@@ -514,7 +495,7 @@ func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resol
     // Perform a search for the file through the include_dirs in bazelifyrc,
     // and the current library's directory.
     searchPaths := make([]string, 0, len(b.rc.GetIncludeDirs()) + 1)
-    searchPaths = append(searchPaths, dir)
+    searchPaths = append(searchPaths, filepath.Join(b.workspaceDir, ownLabel.Dir()))
     // Make all search paths absolute. They are relative to the SDK directory,
     // so append it to the SDK directory, and make it absolute and cleaned.
     for _, includeDir := range b.rc.GetIncludeDirs() {
@@ -540,16 +521,19 @@ func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resol
         continue
       }
       foundRelative = true
-      target := b.searchSourceSets(filepath.Dir(search), filepath.Base(search))
-      if target == "" {
-        target = b.formatTarget(&possibleTargets{
-          possible: []*targetInfo{
-            {
-              dir: filepath.Dir(search),
-              hdrs: []string{filepath.Base(search)},
-            },
-          },
-        }, dir)
+      searchDir := filepath.Dir(search)
+      target := b.searchSourceSets(searchPath, info.Name())
+      if target == nil {
+        shortName := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
+        label, err := bazel.NewLabel(searchDir, shortName, b.workspaceDir)
+        if err != nil {
+          log.Fatalf("bazel.NewLabel(%q, %q, %q): %v", searchDir, shortName, b.workspaceDir, err)
+        }
+        target = label
+      }
+      // Remove dependencies on ourselves.
+      if target.String() == ownLabel.String() {
+        continue
       }
       resolved = append(resolved, target)
       break
@@ -566,12 +550,14 @@ func (b *buildGen) splitResolvableIncludes(dir string, includes []string) (resol
 // We need to make sure b.targets contains an entry for each include that we need.
 // When we go through with resolveTargets, we'll check that every target has
 // exactly 1 possible target. If unpopulated, these will show up as 0 possible targets
-func (b *buildGen) populateIncludesInTargets(requiredBy string, includes []string) {
+func (b *buildGen) populateIncludesInTargets(requiredBy *bazel.Label, includes []string) {
   for _, include := range includes {
     if b.targets[include] == nil {
-      b.targets[include] = &possibleTargets{}
+      b.targets[include] = &possibleTargets{
+        requiredBy: make(map[string]*bazel.Label),
+      }
     }
-    b.targets[include].requiredBy = append(b.targets[include].requiredBy, requiredBy)
+    b.targets[include].requiredBy[requiredBy.String()] = requiredBy
   }
 }
 
@@ -621,7 +607,7 @@ func (b *buildGen) shouldIgnore(header string) bool {
 // searchSourceSets searches through our source sets for the given header files
 // and generates the correct target if found.
 // If not found, we return an empty string.
-func (b *buildGen) searchSourceSets(dir, base string) string {
+func (b *buildGen) searchSourceSets(dir, base string) *bazel.Label {
   // We want it relative to the SDK directory, since source sets use this.
   relDir, err := filepath.Rel(b.sdkDir, dir)
   if err != nil {
@@ -629,13 +615,13 @@ func (b *buildGen) searchSourceSets(dir, base string) string {
     log.Fatalf("filepath.Rel(%q, %q): %v", b.sdkDir, dir, err)
   }
   if b.sourceSets[relDir] == nil {
-    return ""
+    return nil
   }
   return b.sourceSets[relDir][base]
 }
 
 type targetInfo struct {
-  dir        string
+  label *bazel.Label
   hdrs, srcs []string
   // These are includes that aren't relative to this target's base directory.
   // These will be resolved to targets in resolveTargets.
@@ -643,15 +629,15 @@ type targetInfo struct {
   // A list of targets that we already resolved.
   // This happens when we find a relative path include
   // which does not need to go through the target resolution process.
-  resolvedTargets []string
+  resolvedTargets []*bazel.Label
 }
 
 type possibleTargets struct {
-  override string
+  override *bazel.Label
   possible []*targetInfo
   // A list of targets that require this dynamic target.
   // Only for the dynamic resolution phase.
-  requiredBy []string
+  requiredBy map[string]*bazel.Label
 }
 
 func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets) string {
@@ -663,13 +649,18 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
     rc.TargetOverrides = make(map[string]string)
   }
   for name, possible := range unresolved {
-    if override := possible.override; override != "" {
+    if override := possible.override; override != nil {
       log.Fatalf("No resolution hint needed for include %q with override %q", name, override)
     }
     if override := rc.GetTargetOverrides()[name]; override != "" {
       log.Fatalf("Override already exists for include %q: %q", name, override)
     }
-    rc.GetTargetOverrides()[name] = b.formatTarget(possible, "")
+    label, err := b.resolveTargetLabel(possible)
+    if err != nil {
+      rc.GetTargetOverrides()[name] = err.Error()
+    } else {
+      rc.GetTargetOverrides()[name] = label.String()
+    }
   }
   rcText := proto.MarshalTextString(rc)
   rcPath := filepath.Join(b.sdkDir, rcFilename)
