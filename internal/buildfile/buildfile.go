@@ -3,12 +3,16 @@ package buildfile
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"sort"
 )
 
 // New creates a new File.
 func New(dir string) *File {
+	if !filepath.IsAbs(dir) {
+		log.Fatalf("buildfile.New(%q): absolute path required", dir)
+	}
   return &File{
     Path: filepath.Join(dir, "BUILD"),
     packageVisibility: "//visibility:public",
