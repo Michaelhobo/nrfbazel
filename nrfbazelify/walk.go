@@ -16,25 +16,25 @@ func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, excludes,
   for _, ignore := range ignoreHeaders {
     ignoreHeadersMap[ignore] = true
   }
-	overrides := make(map[string]*bazel.Label)
-	for name, override := range includeOverrides {
-		label, err := bazel.ParseLabel(override)
-		if err != nil {
-			return nil, err
-		}
-		overrides[name] = label
-	}
+  overrides := make(map[string]*bazel.Label)
+  for name, override := range includeOverrides {
+    label, err := bazel.ParseLabel(override)
+    if err != nil {
+      return nil, err
+    }
+    overrides[name] = label
+  }
 
-	absIncludeDirs := make([]string, 0, len(includeDirs))
-	// Make all include dir paths absolute.
-	for _, dir := range includeDirs {
-		joined := filepath.Join(sdkDir, dir)
-		abs, err := filepath.Abs(joined)
-		if err != nil {
-			return nil, fmt.Errorf("filepath.Abs(%q): %v", joined, err)
-		}
-		absIncludeDirs = append(absIncludeDirs, abs)
-	}
+  absIncludeDirs := make([]string, 0, len(includeDirs))
+  // Make all include dir paths absolute.
+  for _, dir := range includeDirs {
+    joined := filepath.Join(sdkDir, dir)
+    abs, err := filepath.Abs(joined)
+    if err != nil {
+      return nil, fmt.Errorf("filepath.Abs(%q): %v", joined, err)
+    }
+    absIncludeDirs = append(absIncludeDirs, abs)
+  }
 
   return &SDKWalker{
     sdkDir: sdkDir,
@@ -42,8 +42,8 @@ func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, excludes,
     graph: graph,
     excludes: excludes,
     ignoreHeaders: ignoreHeadersMap,
-		includeDirs: absIncludeDirs,
-		includeOverrides: overrides,
+    includeDirs: absIncludeDirs,
+    includeOverrides: overrides,
   }, nil
 }
 
@@ -52,8 +52,8 @@ type SDKWalker struct {
   graph *DependencyGraph
   excludes []string
   ignoreHeaders map[string]bool
-	includeDirs []string
-	includeOverrides map[string]*bazel.Label // file name -> override label
+  includeDirs []string
+  includeOverrides map[string]*bazel.Label // file name -> override label
 }
 
 func (s *SDKWalker) PopulateGraph() ([]*unresolvedDep, error) {
@@ -61,9 +61,9 @@ func (s *SDKWalker) PopulateGraph() ([]*unresolvedDep, error) {
   if err := filepath.Walk(s.sdkDir, s.addFilesAsNodes); err != nil {
     return nil, err
   }
-	if err := s.addOverrideNodes(); err != nil {
-		return nil, err
-	}
+  if err := s.addOverrideNodes(); err != nil {
+    return nil, err
+  }
   return s.addDepsAsEdges()
 }
 
@@ -129,68 +129,68 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
 }
 
 func (s *SDKWalker) addOverrideNodes() error {
-	for name, label := range s.includeOverrides {
-		if err := s.graph.AddOverrideNode(name, label); err != nil {
-			return err
-		}
-	}
-	return nil
+  for name, label := range s.includeOverrides {
+    if err := s.graph.AddOverrideNode(name, label); err != nil {
+      return err
+    }
+  }
+  return nil
 }
 
 type unresolvedDep struct {
   includedBy []*bazel.Label
   dstFileName string
-	possible []*bazel.Label
+  possible []*bazel.Label
 }
 
 type resolvedDep struct {
-	src, dst *bazel.Label
+  src, dst *bazel.Label
 }
 
 func (s *SDKWalker) addDepsAsEdges() ([]*unresolvedDep, error) {
-	allUnresolved := make(map[string]*unresolvedDep) // maps dstFileName -> unresolvedDep
-	var allResolved []*resolvedDep
+  allUnresolved := make(map[string]*unresolvedDep) // maps dstFileName -> unresolvedDep
+  var allResolved []*resolvedDep
 
-	// Look through all nodes and add each node's deps as dependencies.
-	// Some dependencies can't be resolved, so we collect those to report it as an error.
-	// We can't add edges into the graph until we've finished looking through all nodes,
-	// in case we mess with the graph. So, we collect all the resolved deps and add them
-	// at the end.
+  // Look through all nodes and add each node's deps as dependencies.
+  // Some dependencies can't be resolved, so we collect those to report it as an error.
+  // We can't add edges into the graph until we've finished looking through all nodes,
+  // in case we mess with the graph. So, we collect all the resolved deps and add them
+  // at the end.
   for _, n := range s.graph.Nodes() {
-  	node, ok := n.(*LibraryNode)
-  	if !ok {
-			// Skip non-Library nodes, because all other node types are resolved differently.
-    	continue
-		}
+    node, ok := n.(*LibraryNode)
+    if !ok {
+      // Skip non-Library nodes, because all other node types are resolved differently.
+      continue
+    }
     resolved, unresolved, err := s.readDepsOnce(node)
-		if err != nil {
-			return nil, fmt.Errorf("readDepsOnce: %v", err)
-		}
-		allResolved = append(allResolved, resolved...)
+    if err != nil {
+      return nil, fmt.Errorf("readDepsOnce: %v", err)
+    }
+    allResolved = append(allResolved, resolved...)
 
-		// Deconflict all our unresolved deps using our allUnresolved map.
-		for _, dep := range unresolved {
-			if unresolvedDeps := allUnresolved[dep.dstFileName]; unresolvedDeps == nil {
-				allUnresolved[dep.dstFileName] = dep
-			} else {
-				unresolvedDeps.includedBy = append(unresolvedDeps.includedBy, dep.includedBy...)
-			}
-		}
+    // Deconflict all our unresolved deps using our allUnresolved map.
+    for _, dep := range unresolved {
+      if unresolvedDeps := allUnresolved[dep.dstFileName]; unresolvedDeps == nil {
+        allUnresolved[dep.dstFileName] = dep
+      } else {
+        unresolvedDeps.includedBy = append(unresolvedDeps.includedBy, dep.includedBy...)
+      }
+    }
   }
 
-	// Add all resolved dependencies to the graph.
-	for _, dep := range allResolved {
-		if err := s.graph.AddDependency(dep.src, dep.dst); err != nil {
-			return nil, err
-		}
-	}
+  // Add all resolved dependencies to the graph.
+  for _, dep := range allResolved {
+    if err := s.graph.AddDependency(dep.src, dep.dst); err != nil {
+      return nil, err
+    }
+  }
 
-	// Convert unresolvedDep back into a slice.
-	var out []*unresolvedDep
-	for _, u := range allUnresolved {
-		out = append(out, u)
-	}
-	return out, nil
+  // Convert unresolvedDep back into a slice.
+  var out []*unresolvedDep
+  for _, u := range allUnresolved {
+    out = append(out, u)
+  }
+  return out, nil
 }
 
 func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolvedDep, error) {
@@ -202,7 +202,7 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
     files[hdr] = true
   }
 
-	// Read includes for srcs and hdrs
+  // Read includes for srcs and hdrs
   deps := make(map[string]bool)
   for file := range files {
     filePath := filepath.Join(s.workspaceDir, node.Label().Dir(), file)
@@ -223,15 +223,15 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
       delete(deps, dep)
     }
   }
-	
-	var resolved []*resolvedDep
-	var unresolved []*unresolvedDep
+  
+  var resolved []*resolvedDep
+  var unresolved []*unresolvedDep
 
-	// Perform a search for the file through the include_dirs in bazelifyrc,
-	// and the current library's directory.
-	searchPaths := make([]string, 0, len(s.includeDirs) + 1)
-	searchPaths = append(searchPaths, filepath.Join(s.workspaceDir, node.Label().Dir()))
-	for dep := range deps {
+  // Perform a search for the file through the include_dirs in bazelifyrc,
+  // and the current library's directory.
+  searchPaths := make([]string, 0, len(s.includeDirs) + 1)
+  searchPaths = append(searchPaths, filepath.Join(s.workspaceDir, node.Label().Dir()))
+  for dep := range deps {
     // Stat all instances of the include. If we find a relative include that matches,
     // format the target and resolve it.
     for _, searchPath := range searchPaths {
@@ -243,45 +243,45 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
       if info.IsDir() {
         continue
       }
-			depLabel, err := bazel.NewLabel(searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir)
-			if err != nil {
-				return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir, err)
-			}
-			// Make sure the node is part of the graph.
-			if depNode := s.graph.Node(depLabel); depNode == nil {
-				continue
-			}
-			resolved = append(resolved, &resolvedDep{
-				src: node.Label(),
-				dst: depLabel,
-			})
-			delete(deps, dep)
+      depLabel, err := bazel.NewLabel(searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir)
+      if err != nil {
+        return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir, err)
+      }
+      // Make sure the node is part of the graph.
+      if depNode := s.graph.Node(depLabel); depNode == nil {
+        continue
+      }
+      resolved = append(resolved, &resolvedDep{
+        src: node.Label(),
+        dst: depLabel,
+      })
+      delete(deps, dep)
       break
     }
-	}
+  }
 
-	// Look through remaining deps and see if we can find nodes that contain the file.
-	for dep := range deps {
-		nodes := s.graph.NodesWithFile(dep)
-		if len(nodes) != 1 {
-			var possible []*bazel.Label
-			for _, n := range nodes {
-				possible = append(possible, n.Label())
-			}
-			unresolved = append(unresolved, &unresolvedDep{
-				includedBy: []*bazel.Label{node.Label()},
-				dstFileName: dep,
-				possible: possible,
-			})
-		} else {
-			resolved = append(resolved, &resolvedDep{
-				src: node.Label(),
-				dst: nodes[0].Label(),
-			})
-		}
-	}
+  // Look through remaining deps and see if we can find nodes that contain the file.
+  for dep := range deps {
+    nodes := s.graph.NodesWithFile(dep)
+    if len(nodes) != 1 {
+      var possible []*bazel.Label
+      for _, n := range nodes {
+        possible = append(possible, n.Label())
+      }
+      unresolved = append(unresolved, &unresolvedDep{
+        includedBy: []*bazel.Label{node.Label()},
+        dstFileName: dep,
+        possible: possible,
+      })
+    } else {
+      resolved = append(resolved, &resolvedDep{
+        src: node.Label(),
+        dst: nodes[0].Label(),
+      })
+    }
+  }
 
-	return resolved, unresolved, nil
+  return resolved, unresolved, nil
 }
 
 func readIncludes(path string) ([]string, error) {
@@ -308,8 +308,8 @@ func readIncludes(path string) ([]string, error) {
 }
 
 func (s *SDKWalker) prettySDKPath(path string) string {
-	if !strings.HasPrefix(path, s.sdkDir) {
-		return fmt.Sprintf("<WARNING: not in SDK %q>", s.sdkDir)
-	}
+  if !strings.HasPrefix(path, s.sdkDir) {
+    return fmt.Sprintf("<WARNING: not in SDK %q>", s.sdkDir)
+  }
   return "<SDK>" + strings.TrimPrefix(path, s.sdkDir)
 }
