@@ -26,5 +26,5 @@ func ReadBazelifyRC(sdkDir string) (*bazelifyrc.Configuration, error) {
   if err := prototext.Unmarshal(rcData, &rc); err != nil {
     return nil, err
   }
-	return &rc, nil
+  return &rc, nil
 }

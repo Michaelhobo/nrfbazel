@@ -31,9 +31,9 @@ const (
 )
 
 var (
-	// dotGraphPath is the path to write the DOT graph for debug and visualization.
-	dotGraphPath = flag.String("dot_graph_path", "", "The path to write the DOT graph. Omit to skip DOT graph output.")
-	includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
+  // dotGraphPath is the path to write the DOT graph for debug and visualization.
+  dotGraphPath = flag.String("dot_graph_path", "", "The path to write the DOT graph. Omit to skip DOT graph output.")
+  includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 )
 // GenerateBuildFiles generates BUILD files. Use this to switch between V1 and V2.
 var GenerateBuildFiles = GenerateBuildFilesV1
@@ -50,37 +50,37 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
     return fmt.Errorf("sdk_dir is not inside workspace_dir:\nsdk_dir=%s\nworkspace_dir=%s", sdkDir, workspaceDir)
   }
   log.Printf("Generating BUILD files for %s", sdkDir)
-	rc, err := ReadBazelifyRC(sdkDir)
-	if err != nil {
-		return fmt.Errorf("ReadBazelifyRC: %v", err)
-	}
-	graph := NewDependencyGraph(sdkDir, workspaceDir)
-	if *dotGraphPath != "" {
-		defer func(path string) {
-			log.Printf("Saving dependency graph to %s", path)
-			if err := graph.OutputDOTGraph(path); err != nil {
-				log.Printf("OutputDOTGraph(%q): %v", path, err)
-			}
-		}(*dotGraphPath)
-	}
-	walker, err := NewSDKWalker(sdkDir, workspaceDir, graph, rc.GetExcludes(), rc.GetIgnoreHeaders(), rc.GetIncludeDirs(), rc.GetTargetOverrides())
-	if err != nil {
-		return fmt.Errorf("NewSDKWalker: %v", err)
-	}
-	unresolvedDeps, err := walker.PopulateGraph()
-	if err != nil {
-		return fmt.Errorf("SDKWalker.PopulateGraph: %v", err)
-	}
-	if len(unresolvedDeps) > 0 {
-		return WriteNewHint(unresolvedDeps, rc, sdkDir, verbose)
-	}
-	if err := OutputBuildFiles(workspaceDir, graph); err != nil {
-		return fmt.Errorf("OutputBuildFiles: %v", err)
-	}
-	if err := RemoveStaleHint(sdkDir); err != nil {
-		return fmt.Errorf("removeStaleHintFile: %v", err)
-	}
-	return nil
+  rc, err := ReadBazelifyRC(sdkDir)
+  if err != nil {
+    return fmt.Errorf("ReadBazelifyRC: %v", err)
+  }
+  graph := NewDependencyGraph(sdkDir, workspaceDir)
+  if *dotGraphPath != "" {
+    defer func(path string) {
+      log.Printf("Saving dependency graph to %s", path)
+      if err := graph.OutputDOTGraph(path); err != nil {
+        log.Printf("OutputDOTGraph(%q): %v", path, err)
+      }
+    }(*dotGraphPath)
+  }
+  walker, err := NewSDKWalker(sdkDir, workspaceDir, graph, rc.GetExcludes(), rc.GetIgnoreHeaders(), rc.GetIncludeDirs(), rc.GetTargetOverrides())
+  if err != nil {
+    return fmt.Errorf("NewSDKWalker: %v", err)
+  }
+  unresolvedDeps, err := walker.PopulateGraph()
+  if err != nil {
+    return fmt.Errorf("SDKWalker.PopulateGraph: %v", err)
+  }
+  if len(unresolvedDeps) > 0 {
+    return WriteNewHint(unresolvedDeps, rc, sdkDir, verbose)
+  }
+  if err := OutputBuildFiles(workspaceDir, graph); err != nil {
+    return fmt.Errorf("OutputBuildFiles: %v", err)
+  }
+  if err := RemoveStaleHint(sdkDir); err != nil {
+    return fmt.Errorf("removeStaleHintFile: %v", err)
+  }
+  return nil
 }
 
 // GenerateBuildFilesV1 generates BUILD files for all C source files in sdkDir
@@ -306,7 +306,7 @@ func (b *buildGen) addLibrary(name, dir string, target *targetInfo, files map[st
   for _, include := range target.includes {
     deps = append(deps, b.targetFromInclude(include, dir))
   }
-	deps = append(deps, target.resolvedTargets...)
+  deps = append(deps, target.resolvedTargets...)
   
   // Sort the srcs, hdrs, and deps so output has a deterministic order.
   // This is especially useful for tests.

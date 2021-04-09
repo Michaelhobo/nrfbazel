@@ -30,18 +30,18 @@ func mustMakeAbs(t *testing.T, dir string) string {
 }
 
 func setup(t *testing.T, sdkFromWorkspace string) (workspaceDir, sdkDir string) {
-	depGraphPath := filepath.Join("/tmp", fmt.Sprintf("%s_depgraph.dot", strings.ReplaceAll(sdkFromWorkspace, "/", "_")))
-	if err := os.Remove(depGraphPath); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("os.Remove(%q): %v", depGraphPath, err)
-	}
-	flag.Set("dot_graph_path", depGraphPath)
-	t.Cleanup(func() { flag.Set("dot_graph_path", "") })
+  depGraphPath := filepath.Join("/tmp", fmt.Sprintf("%s_depgraph.dot", strings.ReplaceAll(sdkFromWorkspace, "/", "_")))
+  if err := os.Remove(depGraphPath); err != nil && !os.IsNotExist(err) {
+    t.Fatalf("os.Remove(%q): %v", depGraphPath, err)
+  }
+  flag.Set("dot_graph_path", depGraphPath)
+  t.Cleanup(func() { flag.Set("dot_graph_path", "") })
   workspaceDir = mustMakeAbs(t, testDataDir)
   sdkDir = filepath.Join(workspaceDir, sdkFromWorkspace)
   t.Cleanup(func() {
     removeAllBuildFiles(t, sdkDir)
   })
-	return
+  return
 }
 
 func newBuildFile(dir string, libs []*buildfile.Library, labelSettings []*buildfile.LabelSetting) *buildfile.File {
@@ -94,7 +94,7 @@ func checkBuildFiles(t *testing.T, files ...*buildfile.File) {
 }
 
 func TestGenerateBuildFiles_Nominal(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "nominal")
+  workspaceDir, sdkDir := setup(t, "nominal")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -126,7 +126,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "name_matches_dir")
+  workspaceDir, sdkDir := setup(t, "name_matches_dir")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -150,7 +150,7 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "relative_includes")
+  workspaceDir, sdkDir := setup(t, "relative_includes")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -176,7 +176,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "build_file_exists")
+  workspaceDir, sdkDir := setup(t, "build_file_exists")
   garbageBuild := filepath.Join(sdkDir, "BUILD")
   if err := os.WriteFile(garbageBuild, []byte(garbageText), 0644); err != nil {
     t.Fatalf("os.WriteFile(%s, %s): %v", garbageBuild, garbageText, err)
@@ -204,7 +204,7 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
-	_, workspaceAndSDKDir := setup(t, "workspace_matches_sdk_dir")
+  _, workspaceAndSDKDir := setup(t, "workspace_matches_sdk_dir")
   if err := GenerateBuildFiles(workspaceAndSDKDir, workspaceAndSDKDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, workspaceAndSDKDir, err)
   }
@@ -227,14 +227,14 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "include_des_not_exist")
+  workspaceDir, sdkDir := setup(t, "include_des_not_exist")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
     t.Errorf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
 }
 
 func TestGenerateBuildFiles_BazelifyRCHint(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_hint")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_hint")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
@@ -257,7 +257,7 @@ func TestGenerateBuildFiles_BazelifyRCHint(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCHintKeepOverride(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_hint_keep_override")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_hint_keep_override")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
@@ -281,7 +281,7 @@ func TestGenerateBuildFiles_BazelifyRCHintKeepOverride(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_target_overrides", "sdkdir"))
+  workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_target_overrides", "sdkdir"))
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -321,7 +321,7 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_exists_but_empty")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_exists_but_empty")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -337,7 +337,7 @@ func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "strange_includes")
+  workspaceDir, sdkDir := setup(t, "strange_includes")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -364,7 +364,7 @@ func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_excludes")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_excludes")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -416,7 +416,7 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_ignore_headers")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_ignore_headers")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -432,7 +432,7 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_include_dirs", "sdkdir"))
+  workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_include_dirs", "sdkdir"))
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -458,7 +458,7 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCMalformed(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_malformed")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_malformed")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): nil error, want an error", testDataDir, sdkDir)
   }
@@ -469,7 +469,7 @@ func TestGenerateBuildFiles_BazelifyRCMalformed(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "bazelifyrc_remap")
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_remap")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -535,7 +535,7 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_RemovesStaleHint(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "removes_stale_hint")
+  workspaceDir, sdkDir := setup(t, "removes_stale_hint")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -546,7 +546,7 @@ func TestGenerateBuildFiles_RemovesStaleHint(t *testing.T) {
 }
 
 func TestGeneratedBuildFiles_SourceSets(t *testing.T) {
-	workspaceDir, sdkDir := setup(t, "source_sets")
+  workspaceDir, sdkDir := setup(t, "source_sets")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -554,8 +554,8 @@ func TestGeneratedBuildFiles_SourceSets(t *testing.T) {
     newBuildFile(sdkDir, []*buildfile.Library{
       {
         Name:     "ab",
-				Hdrs:     []string{"a.h", "b.h"},
-				Srcs:     []string{"b.c"},
+        Hdrs:     []string{"a.h", "b.h"},
+        Srcs:     []string{"b.c"},
         Includes: []string{"."},
         Deps: []string{
           "//source_sets/dir:c",
