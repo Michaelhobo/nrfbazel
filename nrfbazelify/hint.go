@@ -2,12 +2,14 @@ package nrfbazelify
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 )
 
 // WriteNewHint writes a new bazelifyrc hint file that contains hints for unresolved dependencies.
@@ -54,5 +56,9 @@ func unresolvedDepsHint(unresolved []*unresolvedDep, rc *bazelifyrc.Configuratio
 		possibilities := fmt.Sprintf("INCLUDED BY %s PLEASE RESOLVE: %s", strings.Join(includedBy, ","), strings.Join(pleaseResolve, "|"))
 		rc.TargetOverrides[dep.dstFileName] = possibilities
   }
-  return []byte(proto.MarshalTextString(rc))
+  out, err := prototext.Marshal(rc)
+  if err != nil {
+    log.Fatalf("prototext.Marshal bazelifyrc hint: %v", err)
+  }
+  return out
 }

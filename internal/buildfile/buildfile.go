@@ -2,8 +2,8 @@ package buildfile
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 )
@@ -30,7 +30,7 @@ type File struct {
 
 // Write writes the file's generated contents to a file.
 func (f *File) Write() error {
-  return ioutil.WriteFile(f.Path, []byte(f.Generate()), 0644)
+  return os.WriteFile(f.Path, []byte(f.Generate()), 0644)
 }
 
 // Generate generates the output contents of the file.
