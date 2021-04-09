@@ -2,13 +2,12 @@ package nrfbazelify
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 func ReadBazelifyRC(sdkDir string) (*bazelifyrc.Configuration, error) {
@@ -19,12 +18,12 @@ func ReadBazelifyRC(sdkDir string) (*bazelifyrc.Configuration, error) {
     log.Printf("WARNING: No .bazelifyrc found: os.Stat: %v", err)
     return nil, nil
   }
-  rcData, err := ioutil.ReadFile(rcPath)
+  rcData, err := os.ReadFile(rcPath)
   if err != nil {
-    return nil, fmt.Errorf("Could not read %s: %v", rcFilename, err)
+    return nil, fmt.Errorf("could not read %s: %v", rcFilename, err)
   }
   var rc bazelifyrc.Configuration
-  if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
+  if err := prototext.Unmarshal(rcData, &rc); err != nil {
     return nil, err
   }
 	return &rc, nil

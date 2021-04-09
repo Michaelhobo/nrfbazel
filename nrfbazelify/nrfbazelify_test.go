@@ -3,7 +3,6 @@ package nrfbazelify
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,8 +11,8 @@ import (
 
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
-	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -82,7 +81,7 @@ func checkBuildFiles(t *testing.T, files ...*buildfile.File) {
   t.Helper()
 
   for _, file := range files {
-    got, err := ioutil.ReadFile(file.Path)
+    got, err := os.ReadFile(file.Path)
     if err != nil {
       t.Errorf("Failed to read file %s: %v", file.Path, err)
       continue
@@ -179,8 +178,8 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
 func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
 	workspaceDir, sdkDir := setup(t, "build_file_exists")
   garbageBuild := filepath.Join(sdkDir, "BUILD")
-  if err := ioutil.WriteFile(garbageBuild, []byte(garbageText), 0644); err != nil {
-    t.Fatalf("ioutil.WriteFile(%s, %s): %v", garbageBuild, garbageText, err)
+  if err := os.WriteFile(garbageBuild, []byte(garbageText), 0644); err != nil {
+    t.Fatalf("os.WriteFile(%s, %s): %v", garbageBuild, garbageText, err)
   }
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
@@ -195,9 +194,9 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
     }, []*buildfile.LabelSetting{}),
   )
   buildPath := filepath.Join(sdkDir, "BUILD")
-  contents, err := ioutil.ReadFile(buildPath)
+  contents, err := os.ReadFile(buildPath)
   if err != nil {
-    t.Fatalf("ioutil.ReadFile(%s): %v", buildPath, err)
+    t.Fatalf("os.ReadFile(%s): %v", buildPath, err)
   }
   if got, dontWant := string(contents), "garbage to remove"; strings.Contains(got, dontWant) {
     t.Errorf("strings.Contains(%s, %s): got true, want false", got, dontWant)
@@ -240,12 +239,12 @@ func TestGenerateBuildFiles_BazelifyRCHint(t *testing.T) {
     t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
   hintPath := filepath.Join(sdkDir, ".bazelifyrc.hint")
-  hintText, err := ioutil.ReadFile(hintPath)
+  hintText, err := os.ReadFile(hintPath)
   if err != nil {
-    t.Fatalf("ioutil.ReadFile(%s): %v", hintPath, err)
+    t.Fatalf("os.ReadFile(%s): %v", hintPath, err)
   }
   var hint bazelifyrc.Configuration 
-  if err := proto.UnmarshalText(string(hintText), &hint); err != nil {
+  if err := prototext.Unmarshal(hintText, &hint); err != nil {
     t.Fatalf("proto.UnmarshalText(%s): %v", string(hintText), err)
   }
   if diff := cmp.Diff(&bazelifyrc.Configuration{
@@ -263,12 +262,12 @@ func TestGenerateBuildFiles_BazelifyRCHintKeepOverride(t *testing.T) {
     t.Fatalf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
   hintPath := filepath.Join(sdkDir, ".bazelifyrc.hint")
-  hintText, err := ioutil.ReadFile(hintPath)
+  hintText, err := os.ReadFile(hintPath)
   if err != nil {
-    t.Fatalf("ioutil.ReadFile(%s): %v", hintPath, err)
+    t.Fatalf("os.ReadFile(%s): %v", hintPath, err)
   }
   var hint bazelifyrc.Configuration 
-  if err := proto.UnmarshalText(string(hintText), &hint); err != nil {
+  if err := prototext.Unmarshal(hintText, &hint); err != nil {
     t.Fatalf("proto.UnmarshalText(%s): %v", string(hintText), err)
   }
   if diff := cmp.Diff(&bazelifyrc.Configuration{
@@ -510,7 +509,7 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
     }),
   )
 
-  remapBzl, err := ioutil.ReadFile(filepath.Join(sdkDir, "remap.bzl"))
+  remapBzl, err := os.ReadFile(filepath.Join(sdkDir, "remap.bzl"))
   if err != nil {
     t.Fatalf("read remap.bzl: %v", err)
   }

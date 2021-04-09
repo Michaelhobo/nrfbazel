@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,7 +17,8 @@ import (
 
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/Michaelhobo/nrfbazel/internal/remap"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
 )
@@ -148,12 +148,12 @@ func (b *buildGen) loadBazelifyRC() error {
     log.Printf("WARNING: No .bazelifyrc found: os.Stat: %v", err)
     return nil
   }
-  rcData, err := ioutil.ReadFile(rcPath)
+  rcData, err := os.ReadFile(rcPath)
   if err != nil {
     return fmt.Errorf("could not read %s: %v", rcFilename, err)
   }
   var rc bazelifyrc.Configuration
-  if err := proto.UnmarshalText(string(rcData), &rc); err != nil {
+  if err := prototext.Unmarshal(rcData, &rc); err != nil {
     return err
   }
   b.rc = &rc
@@ -270,7 +270,7 @@ func (b *buildGen) outputFiles() error {
   for _, labelSetting := range r.LabelSettings() {
     files[b.sdkDir].AddLabelSetting(labelSetting)
   }
-  if err := ioutil.WriteFile(filepath.Join(b.sdkDir, bzlFilename), r.BzlContents(), 0644); err != nil {
+  if err := os.WriteFile(filepath.Join(b.sdkDir, bzlFilename), r.BzlContents(), 0644); err != nil {
     return err
   }
 
@@ -721,14 +721,17 @@ func (b *buildGen) generateResolutionHint(unresolved map[string]*possibleTargets
     }
     rc.GetTargetOverrides()[name] = b.formatTarget(possible, "")
   }
-  rcText := proto.MarshalTextString(rc)
+  rcText, err := prototext.Marshal(rc)
+  if err != nil {
+    log.Fatalf("prototext.Marshal resolution hint: %v", err)
+  }
   rcPath := filepath.Join(b.sdkDir, rcFilename)
   rcHintPath := rcPath + ".hint"
   verboseText := ""
   if b.verbose {
     verboseText = fmt.Sprintf("\n.bazelifyrc.hint contents:\n%s", rcText)
   }
-  if err := ioutil.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
+  if err := os.WriteFile(rcHintPath, []byte(rcText), 0640); err != nil {
     return fmt.Sprintf("Found unresolved targets. Failed to write hint file: %v%s", err, verboseText)
   }
   return fmt.Sprintf("Found unresolved targets. Please add the resolutions to %s and try again. Hint written to %s%s", rcPath, rcHintPath, verboseText)
