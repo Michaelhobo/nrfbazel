@@ -10,6 +10,6 @@ gazelle_binary(
 gazelle(
     name = "gazelle",
     command = "fix",
-    prefix = "github.com/Michaelhobo/nrfbazel",
     gazelle = "//:gazelle_binary",
+    prefix = "github.com/Michaelhobo/nrfbazel",
 )

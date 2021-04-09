@@ -10,5 +10,6 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = ["label_test.go"],
+    args = ["-test.v"],
     embed = [":go_default_library"],
 )
