@@ -227,6 +227,19 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
   var resolved []*resolvedDep
   var unresolved []*unresolvedDep
 
+  // If the node is overridden, use the override.
+  for dep := range deps {
+    if !s.graph.IsFileOverridden(dep) {
+      continue
+    }
+    resolved = append(resolved, &resolvedDep{
+      src: node.Label(),
+      // If the file is overridden, we're guaranteed to have exactly 1 returned Node.
+      dst: s.graph.NodesWithFile(dep)[0].Label(),
+    })
+    delete(deps, dep)
+  }
+
   // Perform a search for the file through the include_dirs in bazelifyrc,
   // and the current library's directory.
   searchPaths := make([]string, 0, len(s.includeDirs) + 1)

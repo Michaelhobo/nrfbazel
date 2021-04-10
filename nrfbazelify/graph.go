@@ -80,6 +80,11 @@ func (d *DependencyGraph) NodesWithFile(name string) []Node {
   return out
 }
 
+// IsFileOverridden checks if the file with the given name has an override.
+func (d *DependencyGraph) IsFileOverridden(name string) bool {
+  return d.fileNameToLabel[name] != nil && d.fileNameToLabel[name].override != nil
+}
+
 // AddLibraryNode adds a node that represents a cc_library rule.
 func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string) error {
   // If an override node is taking up our label, delete it.
