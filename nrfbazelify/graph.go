@@ -82,6 +82,13 @@ func (d *DependencyGraph) NodesWithFile(name string) []Node {
 
 // AddLibraryNode adds a node that represents a cc_library rule.
 func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string) error {
+  // If an override node is taking up our label, delete it.
+  if _, overrideExists := d.Node(label).(*OverrideNode); overrideExists {
+    if err := d.deleteNode(label); err != nil {
+      return fmt.Errorf("found override node, deleteNode(%q): %v", label, err)
+    }
+  }
+
   nodeID, err := d.nodeID(label)
   if err != nil {
     return err
@@ -103,11 +110,20 @@ func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string
 
 // AddOverrideNode adds a node that represents a target_override from bazelifyrc.
 func (d *DependencyGraph) AddOverrideNode(fileName string, label *bazel.Label) error {
+  if d.fileNameToLabel[fileName] == nil {
+    d.fileNameToLabel[fileName] = newLabelResolver()
+  }
+  resolver := d.fileNameToLabel[fileName]
+  if resolver.override != nil {
+    return fmt.Errorf("override for %q already exists(%q), can't add second override %q", fileName, resolver.override, label)
+  }
+  resolver.override = label
+
   nodeID, err := d.nodeID(label)
   if err != nil {
-    return err
+    // If the label is already taken, just skip it.
+    return nil
   }
-  
   d.graph.AddNode(&OverrideNode{
     id: nodeID,
     label: label,
