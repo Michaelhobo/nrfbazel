@@ -13,12 +13,12 @@ import (
 )
 
 // WriteNewHint writes a new bazelifyrc hint file that contains hints for unresolved dependencies.
-func WriteNewHint(unresolved []*unresolvedDep, rc *bazelifyrc.Configuration, sdkDir string, verbose bool) error {
-  hint := unresolvedDepsHint(unresolved, rc)
-  rcPath := filepath.Join(sdkDir, rcFilename)
+func WriteNewHint(conf *Config, unresolved []*unresolvedDep) error {
+  hint := unresolvedDepsHint(conf, unresolved)
+  rcPath := filepath.Join(conf.SDKDir, rcFilename)
   rcHintPath := rcPath + ".hint"
   verboseText := ""
-  if verbose {
+  if conf.Verbose {
     verboseText = fmt.Sprintf("\n.bazelifyrc.hint contents:\n%s", string(hint))
   }
   if err := os.WriteFile(rcHintPath, []byte(hint), 0640); err != nil {
@@ -36,8 +36,8 @@ func RemoveStaleHint(sdkDir string) error {
   
 }
 
-func unresolvedDepsHint(unresolved []*unresolvedDep, rc *bazelifyrc.Configuration) []byte {
-  rc = proto.Clone(rc).(*bazelifyrc.Configuration)
+func unresolvedDepsHint(conf *Config, unresolved []*unresolvedDep) []byte {
+  rc := proto.Clone(conf.BazelifyRCProto).(*bazelifyrc.Configuration)
   if rc == nil {
     rc = &bazelifyrc.Configuration{}
   }

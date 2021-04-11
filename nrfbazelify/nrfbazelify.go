@@ -24,8 +24,6 @@ import (
 )
 
 const (
-  // We read this file from the root of the SDK.
-  rcFilename = ".bazelifyrc"
   // We write the contents of our remap features to this file.
   bzlFilename = "remap.bzl"
 )
@@ -49,11 +47,11 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
   if !strings.HasPrefix(sdkDir, workspaceDir) {
     return fmt.Errorf("sdk_dir is not inside workspace_dir:\nsdk_dir=%s\nworkspace_dir=%s", sdkDir, workspaceDir)
   }
-  log.Printf("Generating BUILD files for %s", sdkDir)
-  rc, err := ReadBazelifyRC(sdkDir)
+  conf, err := ReadConfig(sdkDir, workspaceDir, verbose)
   if err != nil {
     return fmt.Errorf("ReadBazelifyRC: %v", err)
   }
+  log.Printf("Generating BUILD files for %s", sdkDir)
   graph := NewDependencyGraph(sdkDir, workspaceDir)
   if *dotGraphPath != "" {
     defer func(path string) {
@@ -63,15 +61,7 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
       }
     }(*dotGraphPath)
   }
-  sdkFromWorkspace, err := filepath.Rel(workspaceDir, sdkDir)
-  if err != nil {
-    return fmt.Errorf("filepath.Rel(%q, %q): %v", workspaceDir, sdkDir, err)
-  }
-  remaps, err := remap.New(rc.GetRemaps(), sdkFromWorkspace)
-  if err != nil {
-    return fmt.Errorf("remap.New: %v", err)
-  }
-  walker, err := NewSDKWalker(sdkDir, workspaceDir, graph, remaps, rc.GetExcludes(), rc.GetIgnoreHeaders(), rc.GetIncludeDirs(), rc.GetTargetOverrides())
+  walker, err := NewSDKWalker(conf, graph)
   if err != nil {
     return fmt.Errorf("NewSDKWalker: %v", err)
   }
@@ -80,9 +70,9 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
     return fmt.Errorf("SDKWalker.PopulateGraph: %v", err)
   }
   if len(unresolvedDeps) > 0 {
-    return WriteNewHint(unresolvedDeps, rc, sdkDir, verbose)
+    return WriteNewHint(conf, unresolvedDeps)
   }
-  if err := OutputBuildFiles(workspaceDir, sdkDir, graph, remaps); err != nil {
+  if err := OutputBuildFiles(conf, graph); err != nil {
     return fmt.Errorf("OutputBuildFiles: %v", err)
   }
   if err := RemoveStaleHint(sdkDir); err != nil {

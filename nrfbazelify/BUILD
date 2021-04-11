@@ -3,12 +3,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "go_default_library",
     srcs = [
+        "config.go",
         "graph.go",
         "hint.go",
         "nodes.go",
         "nrfbazelify.go",
         "output.go",
-        "rc.go",
         "walk.go",
     ],
     importpath = "github.com/Michaelhobo/nrfbazel/nrfbazelify",
