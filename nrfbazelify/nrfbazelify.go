@@ -34,7 +34,7 @@ var (
   includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 )
 // GenerateBuildFiles generates BUILD files. Use this to switch between V1 and V2.
-var GenerateBuildFiles = GenerateBuildFilesV1
+var GenerateBuildFiles = GenerateBuildFilesV2
 
 // GenerateBuildFilesV2 generates BUILD files with a new algorithm that removes cyclic dependencies.
 func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
