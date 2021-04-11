@@ -8,10 +8,9 @@ import (
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
-	"github.com/Michaelhobo/nrfbazel/internal/remap"
 )
 
-func OutputBuildFiles(workspaceDir, sdkDir string, depGraph *DependencyGraph, remaps *remap.Remaps) error {
+func OutputBuildFiles(conf *Config, depGraph *DependencyGraph) error {
   files := make(map[string]*buildfile.File)
 
   // Convert depGraph nodes into BUILD files.
@@ -25,7 +24,7 @@ func OutputBuildFiles(workspaceDir, sdkDir string, depGraph *DependencyGraph, re
       continue
     }
     if files[c.label.Dir()] == nil {
-      files[c.label.Dir()] = buildfile.New(filepath.Join(workspaceDir, c.label.Dir()))
+      files[c.label.Dir()] = buildfile.New(filepath.Join(conf.WorkspaceDir, c.label.Dir()))
     }
     file := files[c.label.Dir()]
     if c.library != nil {
@@ -54,10 +53,12 @@ func OutputBuildFiles(workspaceDir, sdkDir string, depGraph *DependencyGraph, re
     }
   }
 
-  // Write remaps .bzl contents.
-  remapBzlPath := filepath.Join(sdkDir, bzlFilename)
-  if err := os.WriteFile(remapBzlPath, remaps.BzlContents(), 0644); err != nil {
-    return fmt.Errorf("WriteFile(%q): %v", remapBzlPath, err)
+  if conf.Remaps != nil {
+    // Write remaps .bzl contents.
+    remapBzlPath := filepath.Join(conf.SDKDir, bzlFilename)
+    if err := os.WriteFile(remapBzlPath, conf.Remaps.BzlContents(), 0644); err != nil {
+      return fmt.Errorf("WriteFile(%q): %v", remapBzlPath, err)
+    }
   }
 
   return nil

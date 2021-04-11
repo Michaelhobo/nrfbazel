@@ -9,59 +9,23 @@ import (
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
-	"github.com/Michaelhobo/nrfbazel/internal/remap"
 )
 
-func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, remaps *remap.Remaps, excludes, ignoreHeaders, includeDirs []string, includeOverrides map[string]string) (*SDKWalker, error) {
-  ignoreHeadersMap := make(map[string]bool)
-  for _, ignore := range ignoreHeaders {
-    ignoreHeadersMap[ignore] = true
-  }
-  overrides := make(map[string]*bazel.Label)
-  for name, override := range includeOverrides {
-    label, err := bazel.ParseLabel(override)
-    if err != nil {
-      return nil, err
-    }
-    overrides[name] = label
-  }
-
-  absIncludeDirs := make([]string, 0, len(includeDirs))
-  // Make all include dir paths absolute.
-  for _, dir := range includeDirs {
-    joined := filepath.Join(sdkDir, dir)
-    abs, err := filepath.Abs(joined)
-    if err != nil {
-      return nil, fmt.Errorf("filepath.Abs(%q): %v", joined, err)
-    }
-    absIncludeDirs = append(absIncludeDirs, abs)
-  }
-
+func NewSDKWalker(conf *Config, graph *DependencyGraph) (*SDKWalker, error) {
   return &SDKWalker{
-    sdkDir: sdkDir,
-    workspaceDir: workspaceDir,
+    conf: conf,
     graph: graph,
-    remaps: remaps,
-    excludes: excludes,
-    ignoreHeaders: ignoreHeadersMap,
-    includeDirs: absIncludeDirs,
-    includeOverrides: overrides,
   }, nil
 }
 
 type SDKWalker struct {
-  sdkDir, workspaceDir string
+  conf *Config
   graph *DependencyGraph
-  remaps *remap.Remaps
-  excludes []string
-  ignoreHeaders map[string]bool
-  includeDirs []string
-  includeOverrides map[string]*bazel.Label // file name -> override label
 }
 
 func (s *SDKWalker) PopulateGraph() ([]*unresolvedDep, error) {
   // Add nodes to graph and add dependencies to resolvedDeps/unresolvedDeps
-  if err := filepath.Walk(s.sdkDir, s.addFilesAsNodes); err != nil {
+  if err := filepath.Walk(s.conf.SDKDir, s.addFilesAsNodes); err != nil {
     return nil, err
   }
   if err := s.addOverrideNodes(); err != nil {
@@ -77,14 +41,9 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
   if err != nil {
     return fmt.Errorf("%s: %v", path, err)
   }
-  relPath, err := filepath.Rel(s.sdkDir, path)
-  if err != nil {
-    return err
-  }
-
   // Check to see if path is excluded.
-  for _, exclude := range s.excludes {
-    matched, err := filepath.Match(exclude, relPath)
+  for _, exclude := range s.conf.Excludes {
+    matched, err := filepath.Match(exclude, path)
     if err != nil {
       return err
     }
@@ -116,9 +75,9 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
   // Create Label
   dir := filepath.Dir(path)
   name := strings.TrimSuffix(info.Name(), ".h")
-  label, err := bazel.NewLabel(dir, name, s.workspaceDir)
+  label, err := bazel.NewLabel(dir, name, s.conf.WorkspaceDir)
   if err != nil {
-    return fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", dir, name, s.workspaceDir, err)
+    return fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", dir, name, s.conf.WorkspaceDir, err)
   }
 
   hdrs := []string{info.Name()}
@@ -135,7 +94,7 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
 }
 
 func (s *SDKWalker) addOverrideNodes() error {
-  for name, label := range s.includeOverrides {
+  for name, label := range s.conf.IncludeOverrides {
     if err := s.graph.AddOverrideNode(name, label); err != nil {
       return err
     }
@@ -144,8 +103,11 @@ func (s *SDKWalker) addOverrideNodes() error {
 }
 
 func (s *SDKWalker) addRemapNodes() error {
-  for fileName, labelSetting := range s.remaps.LabelSettings() {
-    label, err := bazel.NewLabel(s.sdkDir, labelSetting.Name, s.workspaceDir)
+  if s.conf.Remaps == nil {
+    return nil
+  }
+  for fileName, labelSetting := range s.conf.Remaps.LabelSettings() {
+    label, err := bazel.NewLabel(s.conf.SDKDir, labelSetting.Name, s.conf.WorkspaceDir)
     if err != nil {
       return fmt.Errorf("bazel.NewLabel(%q): %v", labelSetting.Name, err)
     }
@@ -153,8 +115,8 @@ func (s *SDKWalker) addRemapNodes() error {
       return fmt.Errorf("AddRemapNode(%q): %v", label, err)
     }
   }
-  for _, lib := range s.remaps.Libraries() {
-    label, err := bazel.NewLabel(s.sdkDir, lib.Name, s.workspaceDir)
+  for _, lib := range s.conf.Remaps.Libraries() {
+    label, err := bazel.NewLabel(s.conf.SDKDir, lib.Name, s.conf.WorkspaceDir)
     if err != nil {
       return fmt.Errorf("bazel.NewLabel(%q): %v", lib.Name, err)
     }
@@ -233,7 +195,7 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
   // Read includes for srcs and hdrs
   deps := make(map[string]bool)
   for file := range files {
-    filePath := filepath.Join(s.workspaceDir, node.Label().Dir(), file)
+    filePath := filepath.Join(s.conf.WorkspaceDir, node.Label().Dir(), file)
     includes, err := readIncludes(filePath)
     if err != nil {
       return nil, nil, fmt.Errorf("readIncludes(%q): %v", s.prettySDKPath(filePath), err)
@@ -245,7 +207,7 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
 
   // Filter the deps
   for dep := range deps {
-    if s.ignoreHeaders[dep] {
+    if s.conf.IgnoreHeaders[dep] {
       delete(deps, dep)
     } else if files[dep] {
       delete(deps, dep)
@@ -270,9 +232,9 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
 
   // Perform a search for the file through the include_dirs in bazelifyrc,
   // and the current library's directory.
-  searchPaths := make([]string, 0, len(s.includeDirs) + 1)
-  searchPaths = append(searchPaths, filepath.Join(s.workspaceDir, node.Label().Dir()))
-  searchPaths = append(searchPaths, s.includeDirs...)
+  searchPaths := make([]string, 0, len(s.conf.IncludeDirs) + 1)
+  searchPaths = append(searchPaths, filepath.Join(s.conf.WorkspaceDir, node.Label().Dir()))
+  searchPaths = append(searchPaths, s.conf.IncludeDirs...)
   for dep := range deps {
     // Stat all instances of the include. If we find a relative include that matches,
     // format the target and resolve it.
@@ -285,9 +247,9 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
       if info.IsDir() {
         continue
       }
-      depLabel, err := bazel.NewLabel(filepath.Dir(search), strings.TrimSuffix(filepath.Base(search), ".h"), s.workspaceDir)
+      depLabel, err := bazel.NewLabel(filepath.Dir(search), strings.TrimSuffix(filepath.Base(search), ".h"), s.conf.WorkspaceDir)
       if err != nil {
-        return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir, err)
+        return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", searchPath, strings.TrimSuffix(dep, ".h"), s.conf.WorkspaceDir, err)
       }
       // Make sure the node is part of the graph.
       if depNode := s.graph.Node(depLabel); depNode == nil {
@@ -350,8 +312,8 @@ func readIncludes(path string) ([]string, error) {
 }
 
 func (s *SDKWalker) prettySDKPath(path string) string {
-  if !strings.HasPrefix(path, s.sdkDir) {
-    return fmt.Sprintf("<WARNING: not in SDK %q>", s.sdkDir)
+  if !strings.HasPrefix(path, s.conf.SDKDir) {
+    return fmt.Sprintf("<WARNING: not in SDK %q>", s.conf.SDKDir)
   }
-  return "<SDK>" + strings.TrimPrefix(path, s.sdkDir)
+  return "<SDK>" + strings.TrimPrefix(path, s.conf.SDKDir)
 }
