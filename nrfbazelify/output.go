@@ -2,14 +2,16 @@ package nrfbazelify
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/Michaelhobo/nrfbazel/internal/remap"
 )
 
-func OutputBuildFiles(workspaceDir string, depGraph *DependencyGraph) error {
+func OutputBuildFiles(workspaceDir, sdkDir string, depGraph *DependencyGraph, remaps *remap.Remaps) error {
   files := make(map[string]*buildfile.File)
 
   // Convert depGraph nodes into BUILD files.
@@ -25,7 +27,16 @@ func OutputBuildFiles(workspaceDir string, depGraph *DependencyGraph) error {
     if files[c.label.Dir()] == nil {
       files[c.label.Dir()] = buildfile.New(filepath.Join(workspaceDir, c.label.Dir()))
     }
-    files[c.label.Dir()].AddLibrary(c.library)
+    file := files[c.label.Dir()]
+    if c.library != nil {
+      file.AddLibrary(c.library)
+    }
+    if c.labelSetting != nil {
+      file.AddLabelSetting(c.labelSetting)
+    }
+    if c.load != nil {
+      file.AddLoad(c.load)
+    }
   }
 
   // Make sure we load cc_library in each BUILD file.
@@ -43,12 +54,20 @@ func OutputBuildFiles(workspaceDir string, depGraph *DependencyGraph) error {
     }
   }
 
+  // Write remaps .bzl contents.
+  remapBzlPath := filepath.Join(sdkDir, bzlFilename)
+  if err := os.WriteFile(remapBzlPath, remaps.BzlContents(), 0644); err != nil {
+    return fmt.Errorf("WriteFile(%q): %v", remapBzlPath, err)
+  }
+
   return nil
 }
 
 type buildContents struct {
   label *bazel.Label
   library *buildfile.Library
+  labelSetting *buildfile.LabelSetting
+  load *buildfile.Load
 }
 
 func extractBuildContents(node Node, depGraph *DependencyGraph) (*buildContents, error) {
@@ -57,6 +76,8 @@ func extractBuildContents(node Node, depGraph *DependencyGraph) (*buildContents,
     return libraryContents(n, depGraph), nil
   case *GroupNode:
     return groupContents(n, depGraph), nil
+  case *RemapNode:
+    return remapContents(n, depGraph), nil
   case *OverrideNode:
     // Override nodes are ignored, they just represent a label,
     // and don't need any rules written.
@@ -86,7 +107,7 @@ func libraryContents(node *LibraryNode, depGraph *DependencyGraph) *buildContent
       Srcs: node.Srcs,
       Hdrs: node.Hdrs,
       Deps: deps,
-      Includes: []string{"."},
+      Includes: node.Includes,
     },
   }
 }
@@ -112,5 +133,12 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) *buildContents {
       Hdrs: node.Hdrs,
       Deps: deps,
     },
+  }
+}
+
+func remapContents(node *RemapNode, depGraph *DependencyGraph) *buildContents {
+  return &buildContents{
+    label: node.Label(),
+    labelSetting: node.LabelSetting,
   }
 }

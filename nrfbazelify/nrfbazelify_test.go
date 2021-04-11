@@ -493,8 +493,8 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
         Hdrs:     []string{"c.h"},
         Includes: []string{"."},
         Deps:     []string{
-          "//bazelifyrc_remap:a_remap",
-          "//bazelifyrc_remap:b_remap",
+          ":a_remap",
+          ":b_remap",
         },
       },
     }, []*buildfile.LabelSetting{

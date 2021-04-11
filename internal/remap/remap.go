@@ -105,21 +105,25 @@ def nrf_cc_binary(name, remap = None, **kwargs):
 // New creates a new remap from a list of header files from
 // bazelifyrc.Configuration's remaps field.
 // sdkFromWorkspace is the relative path from sdkDir to workspaceDir.
-func New(headers []string, sdkFromWorkspace string) *Remaps {
+func New(headers []string, sdkFromWorkspace string) (*Remaps, error) {
   var libs []*buildfile.Library
   if len(headers) != 0 {
     libs = append(libs, &buildfile.Library{Name: emptyRemap})
   }
-  var labelSettings []*buildfile.LabelSetting
+  labelSettings := make(map[string]*buildfile.LabelSetting)
   var remaps []*processed
   for _, header := range headers {
+    if labelSettings[header] != nil {
+      return nil, fmt.Errorf("duplicate remap for header file %q", header)
+    }
+
     shortName := strings.TrimSuffix(header, filepath.Ext(header))
     remapName := fmt.Sprintf("%s_remap", shortName)
     buildSettingDefault := fmt.Sprintf("//%s:%s", sdkFromWorkspace, emptyRemap)
-    labelSettings = append(labelSettings, &buildfile.LabelSetting{
+    labelSettings[header] = &buildfile.LabelSetting{
       Name: remapName,
       BuildSettingDefault: buildSettingDefault,
-    })
+    }
     label := fmt.Sprintf("//%s", sdkFromWorkspace)
     if filepath.Base(sdkFromWorkspace) != remapName {
       label += fmt.Sprintf(":%s", remapName)
@@ -141,7 +145,7 @@ func New(headers []string, sdkFromWorkspace string) *Remaps {
     libs: libs,
     labelSettings: labelSettings,
     bzlContents: []byte(bzlContents),
-  }
+  }, nil
 }
 
 // GenerateLabel generates the label for remapping the header.
@@ -195,7 +199,7 @@ func generateNrfCCBinary(remaps []*processed) string {
 // Remaps holds data for remapping header files dynamically.
 type Remaps struct {
   libs []*buildfile.Library
-  labelSettings []*buildfile.LabelSetting
+  labelSettings map[string]*buildfile.LabelSetting // header file -> label setting
   bzlContents []byte
 }
 
@@ -204,8 +208,8 @@ func (r *Remaps) Libraries() []*buildfile.Library {
   return r.libs
 }
 
-// LabelSettings returns the label_attr rules that need to be created.
-func (r *Remaps) LabelSettings() []*buildfile.LabelSetting {
+// LabelSettings returns the label_attr rules that need to be created for each header file.
+func (r *Remaps) LabelSettings() map[string]*buildfile.LabelSetting {
   return r.labelSettings
 }
 
