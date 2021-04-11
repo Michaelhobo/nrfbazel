@@ -24,17 +24,37 @@ type SDKWalker struct {
 }
 
 func (s *SDKWalker) PopulateGraph() ([]*unresolvedDep, error) {
+  if err := s.addSourceSetFiles(); err != nil {
+    return nil, fmt.Errorf("addSourceSetFiles: %v", err)
+  }
   // Add nodes to graph and add dependencies to resolvedDeps/unresolvedDeps
   if err := filepath.Walk(s.conf.SDKDir, s.addFilesAsNodes); err != nil {
-    return nil, err
+    return nil, fmt.Errorf("filepath.Walk: %v", err)
   }
   if err := s.addOverrideNodes(); err != nil {
-    return nil, err
+    return nil, fmt.Errorf("addOverrideNodes: %v", err)
   }
   if err := s.addRemapNodes(); err != nil {
-    return nil, err
+    return nil, fmt.Errorf("addRemapNodes: %v", err)
   }
-  return s.addDepsAsEdges()
+  unresolved, err := s.addDepsAsEdges()
+  if err != nil {
+    return nil, fmt.Errorf("addDepsAsEdges: %v", err)
+  }
+  return unresolved, nil
+}
+
+func (s *SDKWalker) addSourceSetFiles() error {
+  for labelStr, files := range s.conf.SourceSets {
+    label, err := bazel.ParseLabel(labelStr)
+    if err != nil {
+      return fmt.Errorf("bazel.ParseLabel(%q): %v", labelStr, err)
+    }
+    if err := s.graph.AddLibraryNode(label, files.Srcs, files.Hdrs, []string{"."}); err != nil {
+      return fmt.Errorf("AddLibraryNode(%q): %v", label, err)
+    }
+  }
+  return nil
 }
 
 func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) error {
@@ -69,6 +89,11 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
 
   // We only want to deal with .h files
   if filepath.Ext(path) != ".h" {
+    return nil
+  }
+
+  // Source set files have already been added, so skip them here.
+  if s.conf.SourceSetsByFile[path] != nil {
     return nil
   }
 
