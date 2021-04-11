@@ -1,0 +1,16 @@
+strict digraph Dependencies {
+// Node definitions.
+"//example:a";
+"//example:b";
+"//example:c";
+"//example:sdk_config";
+"//example:sdk_config_remap";
+"//example:nrfbazelify_empty_remap";
+"//example:eb1e4a69-098a-4fb8-a6c6-31f723e3994d";
+
+// Edge definitions.
+"//example:a" -> "//example:eb1e4a69-098a-4fb8-a6c6-31f723e3994d";
+"//example:b" -> "//example:c";
+"//example:b" -> "//example:eb1e4a69-098a-4fb8-a6c6-31f723e3994d";
+"//example:c" -> "//example:eb1e4a69-098a-4fb8-a6c6-31f723e3994d";
+}
