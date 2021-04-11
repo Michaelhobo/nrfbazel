@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 	"github.com/google/uuid"
 	"gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/encoding/dot"
@@ -86,7 +87,8 @@ func (d *DependencyGraph) IsFileOverridden(name string) bool {
 }
 
 // AddLibraryNode adds a node that represents a cc_library rule.
-func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string) error {
+// If includeOwnDir is true, we add our current directory to the includes cc_library field.
+func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string, includes []string) error {
   // If an override node is taking up our label, delete it.
   if _, overrideExists := d.Node(label).(*OverrideNode); overrideExists {
     if err := d.deleteNode(label); err != nil {
@@ -109,6 +111,39 @@ func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string
     label: label,
     Srcs: srcs,
     Hdrs: hdrs,
+    Includes: includes,
+  })
+  return nil
+}
+
+// AddRemapNode adds a node that represents a remapped rule.
+func (d *DependencyGraph) AddRemapNode(label *bazel.Label, fileName string, labelSetting *buildfile.LabelSetting) error {
+  // If an override node is taking up our label, delete it.
+  if _, overrideExists := d.Node(label).(*OverrideNode); overrideExists {
+    if err := d.deleteNode(label); err != nil {
+      return fmt.Errorf("found override node, deleteNode(%q): %v", label, err)
+    }
+  }
+
+  // Set it as the override
+  if d.fileNameToLabel[fileName] == nil {
+    d.fileNameToLabel[fileName] = newLabelResolver()
+  }
+  resolver := d.fileNameToLabel[fileName]
+  if resolver.override != nil {
+    return fmt.Errorf("override for %q already exists(%q), can't add remap %q", fileName, resolver.override, label)
+  }
+  resolver.override = label
+
+  nodeID, err := d.nodeID(label)
+  if err != nil {
+    return err
+  }
+
+  d.graph.AddNode(&RemapNode{
+    id: nodeID,
+    label: label,
+    LabelSetting: labelSetting,
   })
   return nil
 }

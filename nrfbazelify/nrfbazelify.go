@@ -44,7 +44,7 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
     return errors.New("workspace must be an absolute path")
   }
   if !filepath.IsAbs(sdkDir) {
-    return errors.New("sdk must be an absolute path")
+    return errors.New("sdk_dir must be an absolute path")
   }
   if !strings.HasPrefix(sdkDir, workspaceDir) {
     return fmt.Errorf("sdk_dir is not inside workspace_dir:\nsdk_dir=%s\nworkspace_dir=%s", sdkDir, workspaceDir)
@@ -63,7 +63,15 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
       }
     }(*dotGraphPath)
   }
-  walker, err := NewSDKWalker(sdkDir, workspaceDir, graph, rc.GetExcludes(), rc.GetIgnoreHeaders(), rc.GetIncludeDirs(), rc.GetTargetOverrides())
+  sdkFromWorkspace, err := filepath.Rel(workspaceDir, sdkDir)
+  if err != nil {
+    return fmt.Errorf("filepath.Rel(%q, %q): %v", workspaceDir, sdkDir, err)
+  }
+  remaps, err := remap.New(rc.GetRemaps(), sdkFromWorkspace)
+  if err != nil {
+    return fmt.Errorf("remap.New: %v", err)
+  }
+  walker, err := NewSDKWalker(sdkDir, workspaceDir, graph, remaps, rc.GetExcludes(), rc.GetIgnoreHeaders(), rc.GetIncludeDirs(), rc.GetTargetOverrides())
   if err != nil {
     return fmt.Errorf("NewSDKWalker: %v", err)
   }
@@ -74,7 +82,7 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
   if len(unresolvedDeps) > 0 {
     return WriteNewHint(unresolvedDeps, rc, sdkDir, verbose)
   }
-  if err := OutputBuildFiles(workspaceDir, graph); err != nil {
+  if err := OutputBuildFiles(workspaceDir, sdkDir, graph, remaps); err != nil {
     return fmt.Errorf("OutputBuildFiles: %v", err)
   }
   if err := RemoveStaleHint(sdkDir); err != nil {
@@ -263,7 +271,10 @@ func (b *buildGen) outputFiles() error {
     Source: "@rules_cc//cc:defs.bzl",
     Symbols: []string{"cc_library"},
   })
-  r := remap.New(b.rc.GetRemaps(), sdkFromWorkspace)
+  r, err := remap.New(b.rc.GetRemaps(), sdkFromWorkspace)
+  if err != nil {
+    return fmt.Errorf("remap.New: %v", err)
+  }
   for _, lib := range r.Libraries() {
     files[b.sdkDir].AddLibrary(lib)
   }

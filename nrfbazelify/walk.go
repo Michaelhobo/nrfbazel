@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+	"github.com/Michaelhobo/nrfbazel/internal/remap"
 )
 
-func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, excludes, ignoreHeaders, includeDirs []string, includeOverrides map[string]string) (*SDKWalker, error) {
+func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, remaps *remap.Remaps, excludes, ignoreHeaders, includeDirs []string, includeOverrides map[string]string) (*SDKWalker, error) {
   ignoreHeadersMap := make(map[string]bool)
   for _, ignore := range ignoreHeaders {
     ignoreHeadersMap[ignore] = true
@@ -40,6 +41,7 @@ func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, excludes,
     sdkDir: sdkDir,
     workspaceDir: workspaceDir,
     graph: graph,
+    remaps: remaps,
     excludes: excludes,
     ignoreHeaders: ignoreHeadersMap,
     includeDirs: absIncludeDirs,
@@ -50,6 +52,7 @@ func NewSDKWalker(sdkDir, workspaceDir string, graph *DependencyGraph, excludes,
 type SDKWalker struct {
   sdkDir, workspaceDir string
   graph *DependencyGraph
+  remaps *remap.Remaps
   excludes []string
   ignoreHeaders map[string]bool
   includeDirs []string
@@ -62,6 +65,9 @@ func (s *SDKWalker) PopulateGraph() ([]*unresolvedDep, error) {
     return nil, err
   }
   if err := s.addOverrideNodes(); err != nil {
+    return nil, err
+  }
+  if err := s.addRemapNodes(); err != nil {
     return nil, err
   }
   return s.addDepsAsEdges()
@@ -122,7 +128,7 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
     srcs = append(srcs, srcFileName)
   }
 
-  if err := s.graph.AddLibraryNode(label, srcs, hdrs); err != nil {
+  if err := s.graph.AddLibraryNode(label, srcs, hdrs, []string{"."}); err != nil {
     return fmt.Errorf("graph.AddLibraryNode(%q, %v, %v): %v", label, srcs, hdrs, err)
   }
   return nil
@@ -132,6 +138,28 @@ func (s *SDKWalker) addOverrideNodes() error {
   for name, label := range s.includeOverrides {
     if err := s.graph.AddOverrideNode(name, label); err != nil {
       return err
+    }
+  }
+  return nil
+}
+
+func (s *SDKWalker) addRemapNodes() error {
+  for fileName, labelSetting := range s.remaps.LabelSettings() {
+    label, err := bazel.NewLabel(s.sdkDir, labelSetting.Name, s.workspaceDir)
+    if err != nil {
+      return fmt.Errorf("bazel.NewLabel(%q): %v", labelSetting.Name, err)
+    }
+    if err := s.graph.AddRemapNode(label, fileName, labelSetting); err != nil {
+      return fmt.Errorf("AddRemapNode(%q): %v", label, err)
+    }
+  }
+  for _, lib := range s.remaps.Libraries() {
+    label, err := bazel.NewLabel(s.sdkDir, lib.Name, s.workspaceDir)
+    if err != nil {
+      return fmt.Errorf("bazel.NewLabel(%q): %v", lib.Name, err)
+    }
+    if err := s.graph.AddLibraryNode(label, lib.Srcs, lib.Hdrs, lib.Includes); err != nil {
+      return fmt.Errorf("AddLibraryNode(%q): %v", label, err)
     }
   }
   return nil
