@@ -432,7 +432,7 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
-  workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_include_dirs", "sdkdir"))
+  workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_include_dirs"))
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", testDataDir, sdkDir, err)
   }
@@ -443,14 +443,49 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
         Hdrs:     []string{"a.h"},
         Includes: []string{"."},
         Deps: []string{
-          "//bazelifyrc_include_dirs/outsidesdkdir/b",
-          "//bazelifyrc_include_dirs/outsidesdkdir:d",
+          "//bazelifyrc_include_dirs/external/b",
+          "//bazelifyrc_include_dirs/external:d",
           ":c",
         },
       },
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "external"), []*buildfile.Library{
+      {
+        Name:     "d",
+        Hdrs:     []string{"d.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "external", "b"), []*buildfile.Library{
+      {
+        Name:     "b",
+        Hdrs:     []string{"b.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "shouldskipthese"), []*buildfile.Library{
+      {
+        Name:     "d",
+        Hdrs:     []string{"d.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "shouldskipthese", "b"), []*buildfile.Library{
+      {
+        Name:     "b",
+        Hdrs:     []string{"b.h"},
+        Includes: []string{"."},
+      },
+    }, []*buildfile.LabelSetting{}),
+    newBuildFile(filepath.Join(sdkDir, "shouldskipthese", "shouldalsoskipthese"), []*buildfile.Library{
+      {
+        Name:     "d",
+        Hdrs:     []string{"d.h"},
         Includes: []string{"."},
       },
     }, []*buildfile.LabelSetting{}),

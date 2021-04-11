@@ -272,6 +272,7 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
   // and the current library's directory.
   searchPaths := make([]string, 0, len(s.includeDirs) + 1)
   searchPaths = append(searchPaths, filepath.Join(s.workspaceDir, node.Label().Dir()))
+  searchPaths = append(searchPaths, s.includeDirs...)
   for dep := range deps {
     // Stat all instances of the include. If we find a relative include that matches,
     // format the target and resolve it.
@@ -284,7 +285,7 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
       if info.IsDir() {
         continue
       }
-      depLabel, err := bazel.NewLabel(searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir)
+      depLabel, err := bazel.NewLabel(filepath.Dir(search), strings.TrimSuffix(filepath.Base(search), ".h"), s.workspaceDir)
       if err != nil {
         return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", searchPath, strings.TrimSuffix(dep, ".h"), s.workspaceDir, err)
       }
