@@ -21,6 +21,13 @@ func TestLabel_String(t *testing.T) {
       },
       want: "//something/out/there",
     },
+    "strange characters": {
+      label: &Label{
+        dir: "somEtHing_1234.-#",
+        name: "yea",
+      },
+      want: "//somEtHing_1234.-#:yea",
+    },
     "no directory": {
       label: &Label{
         name: "aliens",
@@ -101,6 +108,13 @@ func TestLabel_ParseLabel(t *testing.T) {
       want: &Label{
         dir: "something/out/there",
         name: "there",
+      },
+    },
+    "strange characters": {
+      label: "//somEtHing_1234.-#:yea",
+      want: &Label{
+        dir: "somEtHing_1234.-#",
+        name: "yea",
       },
     },
     "no directory": {

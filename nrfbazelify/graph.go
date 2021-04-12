@@ -308,6 +308,9 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     default:
       return fmt.Errorf("node %q not supported", n.Label())
     }
+    for i := range files {
+      files[i] = filepath.Base(files[i])
+    }
     d.deindexFiles(node.Label(), files)
     d.indexFiles(groupNode.Label(), files)
 
@@ -394,6 +397,10 @@ func (d *DependencyGraph) indexFiles(label *bazel.Label, fileNames []string) {
 
 func (d *DependencyGraph) deindexFiles(label *bazel.Label, fileNames []string) {
   for _, fileName := range fileNames {
+    labelRes := d.fileNameToLabel[fileName]
+    if labelRes == nil {
+      log.Fatalf("d.fileNameToLabel[%q]=nil", fileName)
+    }
     delete(d.fileNameToLabel[fileName].possible, label.String())
     if d.fileNameToLabel[fileName].empty() {
       delete(d.fileNameToLabel, fileName)

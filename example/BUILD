@@ -1,12 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility=["//visibility:public"])
-cc_library(name="05d56680-7342-4ae1-b8f2-253e740576d4", hdrs = ["a.h", "b.h", "c.h"])
+cc_library(name="a", includes = ["."], deps = [":fbda828d-4e1c-4ed1-84c8-2d2a8b98eaea"])
 
-cc_library(name="a", includes = ["."], deps = [":05d56680-7342-4ae1-b8f2-253e740576d4"])
+cc_library(name="b", includes = ["."], deps = [":fbda828d-4e1c-4ed1-84c8-2d2a8b98eaea"])
 
-cc_library(name="b", includes = ["."], deps = [":05d56680-7342-4ae1-b8f2-253e740576d4"])
+cc_library(name="c", includes = ["."], deps = [":fbda828d-4e1c-4ed1-84c8-2d2a8b98eaea"])
 
-cc_library(name="c", includes = ["."], deps = [":05d56680-7342-4ae1-b8f2-253e740576d4"])
+cc_library(name="fbda828d-4e1c-4ed1-84c8-2d2a8b98eaea", hdrs = ["a.h", "b.h", "c.h"])
 
 cc_library(name="nrfbazelify_empty_remap")
 

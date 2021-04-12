@@ -33,7 +33,6 @@ func RemoveStaleHint(sdkDir string) error {
     return err
   }
   return nil
-  
 }
 
 func unresolvedDepsHint(conf *Config, unresolved []*unresolvedDep) []byte {
@@ -56,7 +55,9 @@ func unresolvedDepsHint(conf *Config, unresolved []*unresolvedDep) []byte {
     possibilities := fmt.Sprintf("INCLUDED BY %s PLEASE RESOLVE: %s", strings.Join(includedBy, ","), strings.Join(pleaseResolve, "|"))
     rc.TargetOverrides[dep.dstFileName] = possibilities
   }
-  out, err := prototext.Marshal(rc)
+  out, err := (&prototext.MarshalOptions{
+    Multiline: true,
+  }).Marshal(rc)
   if err != nil {
     log.Fatalf("prototext.Marshal bazelifyrc hint: %v", err)
   }

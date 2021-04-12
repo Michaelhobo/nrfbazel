@@ -8,7 +8,7 @@ import (
 )
 
 var (
-  labelRegexp = regexp.MustCompile(`^//([\w/]*)(?::(\w+))?$`)
+  labelRegexp = regexp.MustCompile(`^//([\w_#-\./]*)(?::(\w+))?$`)
   relativeLabelRegexp = regexp.MustCompile(`^:(\w+)$`)
 )
 
