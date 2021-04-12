@@ -11,7 +11,6 @@ import (
 	"gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/encoding/dot"
 	"gonum.org/v1/gonum/graph/simple"
-	"gonum.org/v1/gonum/graph/traverse"
 )
 
 // NewDependencyGraph creates a new DependencyGraph.
@@ -199,6 +198,9 @@ func (d *DependencyGraph) AddDependency(src, dst *bazel.Label) error {
   if dstID == 0 {
     return fmt.Errorf("%q not in graph", dst)
   }
+  if d.graph.HasEdgeFromTo(srcID, dstID) {
+    return nil
+  }
   srcNode := d.graph.Node(srcID).(Node)
   dstNode := d.graph.Node(dstID).(Node)
   cyclicEdges := d.edgesFromTo(dstNode, srcNode)
@@ -225,17 +227,20 @@ func (d *DependencyGraph) Dependencies(label *bazel.Label) []Node {
 
 func (d *DependencyGraph) edgesFromTo(src, dst Node) ([]graph.Edge) {
   var edges []graph.Edge
-  bfs := &traverse.BreadthFirst{
-    Traverse: func(edge graph.Edge) bool {
-      correctDirection := d.graph.HasEdgeFromTo(edge.To().ID(), dst.ID())
-      toDst := edge.To().ID() == dst.ID()
-      if correctDirection || toDst {
-        edges = append(edges, edge)
-      }
-      return correctDirection
-    },
+  nodes := d.graph.From(src.ID())
+  for nodes.Next() {
+    next := nodes.Node()
+    if next.ID() == dst.ID() {
+      edges = append(edges, d.graph.NewEdge(src, dst))
+      continue
+    }
+    childEdges := d.edgesFromTo(nodes.Node().(Node), dst)
+    if len(childEdges) == 0 {
+      continue
+    }
+    edges = append(edges, d.graph.NewEdge(src, next))
+    edges = append(edges, childEdges...)
   }
-  bfs.Walk(d.graph, src, nil)
   return edges
 }
 

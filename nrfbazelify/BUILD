@@ -24,7 +24,6 @@ go_library(
         "@org_gonum_v1_gonum//graph:go_default_library",
         "@org_gonum_v1_gonum//graph/encoding/dot:go_default_library",
         "@org_gonum_v1_gonum//graph/simple:go_default_library",
-        "@org_gonum_v1_gonum//graph/traverse:go_default_library",
     ],
 )
 
