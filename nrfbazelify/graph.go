@@ -211,11 +211,11 @@ func (d *DependencyGraph) AddDependency(src, dst *bazel.Label) error {
   if dstID == 0 {
     return fmt.Errorf("%q not in graph", dst)
   }
+  srcNode := d.shiftIfIsPointer(d.graph.Node(srcID).(Node))
+  dstNode := d.graph.Node(dstID).(Node)
   if d.graph.HasEdgeFromTo(srcID, dstID) {
     return nil
   }
-  srcNode := d.graph.Node(srcID).(Node)
-  dstNode := d.graph.Node(dstID).(Node)
   cyclicEdges := d.edgesFromTo(dstNode, srcNode)
   if len(cyclicEdges) != 0 {
     if err := d.mergeCycle(cyclicEdges); err != nil {
@@ -226,6 +226,20 @@ func (d *DependencyGraph) AddDependency(src, dst *bazel.Label) error {
   edge := d.graph.NewEdge(srcNode, dstNode)
   d.graph.SetEdge(edge)
   return d.outputDOTGraphProgress()
+}
+
+// shiftIfIsPointer returns the Node that node points to, only if node is a pointer LibraryNode.
+func (d *DependencyGraph) shiftIfIsPointer(node Node) Node {
+  libNode := node.(*LibraryNode)
+  if libNode == nil || !libNode.IsPointer {
+    return node
+  }
+  fromNodes := d.graph.From(node.ID())
+  if fromNodes.Len() != 1 {
+    log.Fatalf("Pointer node %q doesn't have any edges from it.", node.Label())
+  }
+  fromNodes.Next()
+  return fromNodes.Node().(Node)
 }
 
 // Dependencies returns all nodes that are dependencies of node.
