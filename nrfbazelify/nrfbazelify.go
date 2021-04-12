@@ -29,8 +29,8 @@ const (
 )
 
 var (
-  // dotGraphPath is the path to write the DOT graph for debug and visualization.
   dotGraphPath = flag.String("dot_graph_path", "", "The path to write the DOT graph. Omit to skip DOT graph output.")
+  dotGraphProgressionDir = flag.String("dot_graph_progression_dir", "", "The path to a directory to write the DOT graph progression. Omit to skip DOT graph progression output.")
   includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 )
 // GenerateBuildFiles generates BUILD files. Use this to switch between V1 and V2.
@@ -52,7 +52,7 @@ func GenerateBuildFilesV2(workspaceDir, sdkDir string, verbose bool) error {
     return fmt.Errorf("ReadBazelifyRC: %v", err)
   }
   log.Printf("Generating BUILD files for %s", sdkDir)
-  graph := NewDependencyGraph(sdkDir, workspaceDir)
+  graph := NewDependencyGraph(sdkDir, workspaceDir, *dotGraphProgressionDir)
   if *dotGraphPath != "" {
     defer func(path string) {
       log.Printf("Saving dependency graph to %s", path)

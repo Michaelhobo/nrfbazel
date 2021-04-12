@@ -6,11 +6,11 @@ strict digraph Dependencies {
 "//example:sdk_config";
 "//example:sdk_config_remap";
 "//example:nrfbazelify_empty_remap";
-"//example:79d8d6e3-ac40-4f03-9361-415ade6cb10b";
+"//example:a1f1b8c8-4d62-4ee7-9ad0-c3df1651eb53";
 
 // Edge definitions.
-"//example:a" -> "//example:79d8d6e3-ac40-4f03-9361-415ade6cb10b";
-"//example:b" -> "//example:79d8d6e3-ac40-4f03-9361-415ade6cb10b";
-"//example:c" -> "//example:b";
-"//example:c" -> "//example:79d8d6e3-ac40-4f03-9361-415ade6cb10b";
+"//example:a" -> "//example:a1f1b8c8-4d62-4ee7-9ad0-c3df1651eb53";
+"//example:b" -> "//example:c";
+"//example:b" -> "//example:a1f1b8c8-4d62-4ee7-9ad0-c3df1651eb53";
+"//example:c" -> "//example:a1f1b8c8-4d62-4ee7-9ad0-c3df1651eb53";
 }

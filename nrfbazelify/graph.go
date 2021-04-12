@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
@@ -14,10 +15,12 @@ import (
 )
 
 // NewDependencyGraph creates a new DependencyGraph.
-func NewDependencyGraph(sdkDir, workspaceDir string) *DependencyGraph {
+func NewDependencyGraph(sdkDir, workspaceDir, dotGraphProgressionDir string) *DependencyGraph {
   return &DependencyGraph{
     sdkDir: sdkDir,
     workspaceDir: workspaceDir,
+    dotGraphProgressionDir: dotGraphProgressionDir,
+    dotGraphProgressionCount: 0,
     labelToID: make(map[string]int64),
     idToLabel: make(map[int64]string),
     fileNameToLabel: make(map[string]*labelResolver),
@@ -27,7 +30,8 @@ func NewDependencyGraph(sdkDir, workspaceDir string) *DependencyGraph {
 
 // DependencyGraph is a Bazel dependency graph used to resolve conflicts and fix cyclic dependencies.
 type DependencyGraph struct {
-  sdkDir, workspaceDir string
+  sdkDir, workspaceDir, dotGraphProgressionDir string
+  dotGraphProgressionCount int
   nextID int64
   labelToID map[string]int64 // label.String() -> node ID
   idToLabel map[int64]string // node ID -> label.String()
@@ -46,6 +50,15 @@ func (d *DependencyGraph) OutputDOTGraph(path string) error {
     return fmt.Errorf("WriteFile(%q): %v", path, err)
   }
   return nil
+}
+
+func (d *DependencyGraph) outputDOTGraphProgress() error {
+  if d.dotGraphProgressionDir == "" {
+    return nil
+  }
+  defer func() { d.dotGraphProgressionCount++ }()
+  file := filepath.Join(d.dotGraphProgressionDir, fmt.Sprintf("%08d.dot", d.dotGraphProgressionCount))
+  return d.OutputDOTGraph(file)
 }
 
 func (d *DependencyGraph) Nodes() []Node {
@@ -208,11 +221,11 @@ func (d *DependencyGraph) AddDependency(src, dst *bazel.Label) error {
     if err := d.mergeCycle(cyclicEdges); err != nil {
       return fmt.Errorf("mergeCycle: %v", err)
     }
-    return nil
+    return d.outputDOTGraphProgress()
   }
   edge := d.graph.NewEdge(srcNode, dstNode)
   d.graph.SetEdge(edge)
-  return nil
+  return d.outputDOTGraphProgress()
 }
 
 // Dependencies returns all nodes that are dependencies of node.
