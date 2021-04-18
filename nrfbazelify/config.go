@@ -91,8 +91,8 @@ func readBazelifyRC(conf *Config) error {
       return fmt.Errorf("bazel.NewLabel(%v, %v): %v", sourceSetDir, sourceSet.GetName(), err)
     }
 
-    absSrcs := makeAbs(conf.SDKDir, sourceSet.GetSrcs())
-    absHdrs := makeAbs(conf.SDKDir, sourceSet.GetHdrs())
+    absSrcs := makeAbs(filepath.Join(conf.SDKDir, sourceSet.GetDir()), sourceSet.GetSrcs())
+    absHdrs := makeAbs(filepath.Join(conf.SDKDir, sourceSet.GetDir()), sourceSet.GetHdrs())
 
     // Add files to index by file name, and make sure the files exist.
     files := make([]string, 0, len(sourceSet.GetSrcs()) + len(sourceSet.GetHdrs()))
@@ -132,7 +132,7 @@ type Config struct {
   Verbose bool
   BazelifyRCProto *bazelifyrc.Configuration
   Remaps *remap.Remaps
-  Excludes []string // header file names
+  Excludes []string // file paths to exclude, converted to absolute paths
   IncludeDirs []string // all paths converted to absolute paths
   IgnoreHeaders map[string]bool // header file name -> should ignore
   IncludeOverrides map[string]*bazel.Label // file name -> override label
