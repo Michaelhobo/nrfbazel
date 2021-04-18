@@ -6,9 +6,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+)
+
+var (
+	includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 )
 
 func NewSDKWalker(conf *Config, graph *DependencyGraph) (*SDKWalker, error) {

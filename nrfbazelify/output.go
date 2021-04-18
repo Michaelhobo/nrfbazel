@@ -10,6 +10,11 @@ import (
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 )
 
+const (
+  // We write the contents of our remap features to this file.
+  bzlFilename = "remap.bzl"
+)
+
 func OutputBuildFiles(conf *Config, depGraph *DependencyGraph) error {
   files := make(map[string]*buildfile.File)
 
