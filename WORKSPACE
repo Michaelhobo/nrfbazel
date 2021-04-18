@@ -32,14 +32,14 @@ gazelle_dependencies()
 
 http_archive(
     name = "golink",
-    sha256 = "ea728cfc9cb6e2ae024e1d5fbff185224592bbd4dad6516f3cc96d5155b69f0d",
-    strip_prefix = "golink-1.0.0",
-    urls = ["https://github.com/nikunjy/golink/archive/v1.0.0.tar.gz"],
+    sha256 = "c505a82b7180d4315bbaf05848e9b7d2683e80f1b16159af51a0ecae6fb2d54d",
+    strip_prefix = "golink-1.1.0",
+    urls = ["https://github.com/nikunjy/golink/archive/v1.1.0.tar.gz"],
 )
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "ffd7e4f2eb7864347bc165d2874766eefc6b2da89d29551a05fc88338cbed9fe",
+    sha256 = "885e8efbc12013ef91a8af0107285e6c6cb84c0d2af5e0569e0eee9745b48f53",
     strip_prefix = "protobuf-master",
     urls = ["https://github.com/protocolbuffers/protobuf/archive/master.zip"],
 )
@@ -47,10 +47,6 @@ http_archive(
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
-
-load("//:repositories.bzl", "nrfbazel_dependencies")
-
-nrfbazel_dependencies()
 
 go_repository(
     name = "com_github_golang_protobuf",
