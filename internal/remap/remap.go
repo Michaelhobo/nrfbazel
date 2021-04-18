@@ -148,17 +148,6 @@ func New(headers []string, sdkFromWorkspace string) (*Remaps, error) {
   }, nil
 }
 
-// GenerateLabel generates the label for remapping the header.
-func GenerateLabel(header string, sdkFromWorkspace string) string {
-  shortName := strings.TrimSuffix(header, filepath.Ext(header))
-  remapName := fmt.Sprintf("%s_remap", shortName)
-  label := fmt.Sprintf("//%s", sdkFromWorkspace)
-  if filepath.Base(sdkFromWorkspace) != remapName {
-    label += fmt.Sprintf(":%s", remapName)
-  }	
-  return label
-}
-
 type processed struct {
   // The original header name
   header string
