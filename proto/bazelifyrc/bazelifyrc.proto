@@ -43,6 +43,8 @@ message Configuration {
   // Source sets allow you to specify sets of files that should be grouped
   // in the same cc_library rule.
   repeated SourceSet source_sets = 6;
+  // Apply fixed names to groups created by cyclic dependencies.
+  repeated NamedGroup named_groups = 7;
 }
 
 message SourceSet {
@@ -54,4 +56,10 @@ message SourceSet {
   repeated string srcs = 3;
   // The contents of the hdrs field to cc_library.
   repeated string hdrs = 4;
+}
+
+message NamedGroup {
+  string name = 1;
+  string first_hdr = 2;
+  string last_hdr = 3;
 }

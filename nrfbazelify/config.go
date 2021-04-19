@@ -32,6 +32,7 @@ func ReadConfig(sdkDir, workspaceDir string, verbose bool) (*Config, error) {
     IncludeOverrides: make(map[string]*bazel.Label),
     SourceSetsByFile: make(map[string]*bazel.Label),
     SourceSets: make(map[string]*CCFiles),
+    NamedGroups: make(map[string]map[string]string),
   }
   if err := readBazelifyRC(conf); err != nil {
     return nil, err
@@ -124,6 +125,14 @@ func readBazelifyRC(conf *Config) error {
     }
   }
 
+  // Add named groups.
+  for _, namedGroup := range rc.GetNamedGroups() {
+    if conf.NamedGroups[namedGroup.GetFirstHdr()] == nil {
+      conf.NamedGroups[namedGroup.GetFirstHdr()] = make(map[string]string)
+    }
+    conf.NamedGroups[namedGroup.GetFirstHdr()][namedGroup.GetLastHdr()] = namedGroup.GetName()
+  }
+
   return nil
 }
 
@@ -139,6 +148,7 @@ type Config struct {
   IncludeOverrides map[string]*bazel.Label // file name -> override label
   SourceSetsByFile map[string]*bazel.Label // file path -> label of rule containing file
   SourceSets map[string]*CCFiles // label.String() -> files in source set
+  NamedGroups map[string]map[string]string // first header -> last header -> name
 }
 
 // Makes a copy of relPaths where all paths will be absolute, prefixed with sdkDir. 
@@ -148,23 +158,6 @@ func makeAbs(dir string, relPaths []string) []string {
     out = append(out, filepath.Join(dir, relPath))
   }
   return out
-}
-
-// makeRel makes a copy of absPaths where all paths are relative from dir.
-// Any current directory paths (aka ".") will turn into empty strings.
-func makeRel(dir string, absPaths []string) ([]string, error) {
-  out := make([]string, 0, len(absPaths))
-  for _, absPath := range absPaths {
-    relPath, err := filepath.Rel(dir, absPath)
-    if err != nil {
-      return nil, fmt.Errorf("filepath.Rel(%q, %q): %v", dir, absPath, err)
-    }
-    if relPath == "." {
-      relPath = ""
-    }
-    out = append(out, relPath)
-  }
-  return out, nil
 }
 
 // makeLabels turns the absolute paths into labels.

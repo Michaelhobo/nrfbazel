@@ -51,8 +51,15 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
     return fmt.Errorf("SDKWalker.PopulateGraph: %v", err)
   }
   if len(unresolvedDeps) > 0 {
-    return WriteNewHint(conf, unresolvedDeps)
+    return WriteUnresolvedDepsHint(conf, unresolvedDeps)
   }
+	unnamedGroups, err := NameGroups(conf, graph)
+	if err != nil {
+		return fmt.Errorf("NameGroups: %v", err)
+	}
+	if len(unnamedGroups) > 0 {
+		return WriteUnnamedGroupsHint(conf, unnamedGroups)
+	}
   if err := OutputBuildFiles(conf, graph); err != nil {
     return fmt.Errorf("OutputBuildFiles: %v", err)
   }
