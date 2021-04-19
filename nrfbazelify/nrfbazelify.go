@@ -32,7 +32,6 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
   if err != nil {
     return fmt.Errorf("ReadBazelifyRC: %v", err)
   }
-  log.Printf("Generating BUILD files for %s", sdkDir)
   graph := NewDependencyGraph(sdkDir, workspaceDir, *dotGraphProgressionDir)
   if *dotGraphPath != "" {
     defer func(path string) {
@@ -53,18 +52,22 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
   if len(unresolvedDeps) > 0 {
     return WriteUnresolvedDepsHint(conf, unresolvedDeps)
   }
-	unnamedGroups, err := NameGroups(conf, graph)
-	if err != nil {
-		return fmt.Errorf("NameGroups: %v", err)
-	}
-	if len(unnamedGroups) > 0 {
-		return WriteUnnamedGroupsHint(conf, unnamedGroups)
-	}
+  unnamedGroups, err := NameGroups(conf, graph)
+  if err != nil {
+    return fmt.Errorf("NameGroups: %v", err)
+  }
+  if len(unnamedGroups) > 0 {
+    return WriteUnnamedGroupsHint(conf, unnamedGroups)
+  }
   if err := OutputBuildFiles(conf, graph); err != nil {
     return fmt.Errorf("OutputBuildFiles: %v", err)
   }
   if err := RemoveStaleHint(sdkDir); err != nil {
     return fmt.Errorf("removeStaleHintFile: %v", err)
   }
+
+  stats := graph.StatsSnapshot()
+  log.Print(stats.GenerateReport())
+
   return nil
 }
