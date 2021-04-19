@@ -2,8 +2,6 @@ package nrfbazelify
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
@@ -19,7 +17,7 @@ type Node interface {
 type LibraryNode struct {
   id int64
   label *bazel.Label
-  Srcs, Hdrs []string
+  Srcs, Hdrs []*bazel.Label
   Includes []string
   // Library nodes that have been merged into group nodes become pointer nodes.
   // Pointer nodes just point to a single group node as a dependency.
@@ -42,7 +40,7 @@ func (l *LibraryNode) Label() *bazel.Label {
 type GroupNode struct {
   id int64
   label *bazel.Label
-  Srcs, Hdrs []string
+  Srcs, Hdrs []*bazel.Label
 }
 
 func (g *GroupNode) ID() int64 {
@@ -60,41 +58,20 @@ func (g *GroupNode) Label() *bazel.Label {
 // Absorb merges the contents of node into the GroupNode,
 // and clears the contents of the node.
 func (g *GroupNode) Absorb(node Node) error {
-  ownDir := g.Label().Dir()
-  nodeDir := node.Label().Dir()
-  if !strings.HasPrefix(nodeDir, ownDir) {
-    return fmt.Errorf("%q must be a subdirectory of %q", nodeDir, ownDir)
-  }
-  rel, err := filepath.Rel(ownDir, nodeDir)
-  if err != nil {
-    return fmt.Errorf("filepath.Rel(%q, %q): %v", ownDir, nodeDir, err)
-  }
-
-  var srcs, hdrs []string
   switch n := node.(type) {
   case *GroupNode:
-    srcs = append(srcs, n.Srcs...)
-    hdrs = append(hdrs, n.Hdrs...)
+    g.Srcs = append(g.Srcs, n.Srcs...)
+    g.Hdrs = append(g.Hdrs, n.Hdrs...)
     n.Srcs = nil
     n.Hdrs = nil
   case *LibraryNode:
-    srcs = append(srcs, n.Srcs...)
-    hdrs = append(hdrs, n.Hdrs...)
+    g.Srcs = append(g.Srcs, n.Srcs...)
+    g.Hdrs = append(g.Hdrs, n.Hdrs...)
     n.Srcs = nil
     n.Hdrs = nil
   default:
     return fmt.Errorf("node %q not supported", node.Label())
   }
-
-  for i := range srcs {
-    srcs[i] = filepath.Join(rel, srcs[i])
-  }
-  for i := range hdrs {
-    hdrs[i] = filepath.Join(rel, hdrs[i])
-  }
-
-  g.Srcs = append(g.Srcs, srcs...)
-  g.Hdrs = append(g.Hdrs, hdrs...)
   return nil
 }
 

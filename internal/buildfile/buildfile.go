@@ -16,6 +16,7 @@ func New(dir string) *File {
   return &File{
     Path: filepath.Join(dir, "BUILD"),
     packageVisibility: "//visibility:public",
+    exportFiles: make(map[string]bool),
   }
 }
 
@@ -26,6 +27,7 @@ type File struct {
   libs []*Library
   labelSettings []*LabelSetting
   packageVisibility string
+  exportFiles map[string]bool
 }
 
 // Write writes the file's generated contents to a file.
@@ -48,6 +50,16 @@ func (f *File) Generate() string {
   // Add default visibility
   out += fmt.Sprintf("package(default_visibility=[%q])\n", f.packageVisibility)
 
+  // Generate exports_files statement.
+  if len(f.exportFiles) > 0 {
+    var exportFiles []string
+    for f := range f.exportFiles {
+      exportFiles = append(exportFiles, f)
+    }
+    sort.Strings(exportFiles)
+    out += fmt.Sprintf("exports_files([%s])\n", joinQuoted(exportFiles, ","))
+  }
+
   // Generate all libraries
   sort.Slice(f.libs, func(i, j int) bool {
     return f.libs[i].Name < f.libs[j].Name
@@ -67,9 +79,25 @@ func (f *File) Generate() string {
   return out
 }
 
+func joinQuoted(all []string, sep string) string {
+  var out string
+  for i, val := range all {
+    if i > 0 {
+      out += sep
+    }
+    out += fmt.Sprintf("%q", val)
+  }
+  return out
+}
+
 // AddLoad adds a load statement to this file.
 func (f *File) AddLoad(load *Load) {
   f.loads = append(f.loads, load)
+}
+
+// ExportFile adds the file to the exports_files rule for this file.
+func (f *File) ExportFile(file string) {
+  f.exportFiles[file] = true
 }
 
 // AddLibrary adds a library to this file.
