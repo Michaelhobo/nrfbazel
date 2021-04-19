@@ -1,17 +1,17 @@
 package nrfbazelify
 
 import (
-  "fmt"
-  "log"
-  "os"
-  "path/filepath"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 
-  "github.com/Michaelhobo/nrfbazel/internal/bazel"
-  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
-  "github.com/google/uuid"
-  "gonum.org/v1/gonum/graph"
-  "gonum.org/v1/gonum/graph/encoding/dot"
-  "gonum.org/v1/gonum/graph/simple"
+	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/google/uuid"
+	"gonum.org/v1/gonum/graph"
+	"gonum.org/v1/gonum/graph/encoding/dot"
+	"gonum.org/v1/gonum/graph/simple"
 )
 
 // NewDependencyGraph creates a new DependencyGraph.
@@ -59,6 +59,17 @@ func (d *DependencyGraph) outputDOTGraphProgress() error {
   return d.OutputDOTGraph(file)
 }
 
+// StatsSnapshot generates GraphStats based on the current state of this graph.
+func (d *DependencyGraph) StatsSnapshot() *GraphStats {
+  nodes := d.graph.Nodes()
+  edges := d.graph.Edges()
+  return &GraphStats{
+    NodeCount: nodes.Len(),
+    EdgeCount: edges.Len(),
+  }
+}
+
+// Nodes returns a all current nodes.
 func (d *DependencyGraph) Nodes() []Node {
   var out []Node
   nodes := d.graph.Nodes()
