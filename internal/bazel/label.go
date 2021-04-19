@@ -110,3 +110,14 @@ func (l *Label) RelativeTo(other *Label) string {
   }
   return fmt.Sprintf(":%s", l.name)
 }
+
+// FileRelativeTo generates the label string as if it's a file.
+// Files in the same dir just have the name, like "some_file.h".
+// Files in different directories should look like a regular label,
+// like "//some/path:some_file.h".
+func (l *Label) FileRelativeTo(dir string) string {
+  if l.dir != dir {
+    return l.String()
+  }
+  return l.name
+}

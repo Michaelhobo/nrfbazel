@@ -1,13 +1,13 @@
 package nrfbazelify
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
+  "fmt"
+  "os"
+  "path/filepath"
+  "sort"
 
-	"github.com/Michaelhobo/nrfbazel/internal/bazel"
-	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+  "github.com/Michaelhobo/nrfbazel/internal/bazel"
+  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
 )
 
 const (
@@ -21,25 +21,27 @@ func OutputBuildFiles(conf *Config, depGraph *DependencyGraph) error {
   // Convert depGraph nodes into BUILD files.
   nodes := depGraph.Nodes()
   for _, node := range nodes {
-    c, err := extractBuildContents(node, depGraph)
+    contents, err := extractBuildContents(node, depGraph)
     if err != nil {
       return err
     }
-    if c == nil {
-      continue
-    }
-    if files[c.label.Dir()] == nil {
-      files[c.label.Dir()] = buildfile.New(filepath.Join(conf.WorkspaceDir, c.label.Dir()))
-    }
-    file := files[c.label.Dir()]
-    if c.library != nil {
-      file.AddLibrary(c.library)
-    }
-    if c.labelSetting != nil {
-      file.AddLabelSetting(c.labelSetting)
-    }
-    if c.load != nil {
-      file.AddLoad(c.load)
+    for _, c := range contents {
+      if files[c.dir] == nil {
+        files[c.dir] = buildfile.New(filepath.Join(conf.WorkspaceDir, c.dir))
+      }
+      file := files[c.dir]
+      if c.library != nil {
+        file.AddLibrary(c.library)
+      }
+      if c.labelSetting != nil {
+        file.AddLabelSetting(c.labelSetting)
+      }
+      if c.load != nil {
+        file.AddLoad(c.load)
+      }
+      for _, export := range c.exportFiles {
+        file.ExportFile(export)
+      }
     }
   }
 
@@ -70,13 +72,14 @@ func OutputBuildFiles(conf *Config, depGraph *DependencyGraph) error {
 }
 
 type buildContents struct {
-  label *bazel.Label
+  dir string // The directory of this BUILD file, relative to workspaceDir.
   library *buildfile.Library
   labelSetting *buildfile.LabelSetting
   load *buildfile.Load
+  exportFiles []string
 }
 
-func extractBuildContents(node Node, depGraph *DependencyGraph) (*buildContents, error) {
+func extractBuildContents(node Node, depGraph *DependencyGraph) ([]*buildContents, error) {
   switch n := node.(type) {
   case *LibraryNode:
     return libraryContents(n, depGraph), nil
@@ -93,7 +96,7 @@ func extractBuildContents(node Node, depGraph *DependencyGraph) (*buildContents,
   }
 }
 
-func libraryContents(node *LibraryNode, depGraph *DependencyGraph) *buildContents {
+func libraryContents(node *LibraryNode, depGraph *DependencyGraph) []*buildContents {
   var deps []string
   depNodes := depGraph.Dependencies(node.Label())
   for _, d := range depNodes {
@@ -102,23 +105,30 @@ func libraryContents(node *LibraryNode, depGraph *DependencyGraph) *buildContent
 
   // Sort the srcs, hdrs, and deps so output has a deterministic order.
   // This is especially useful for tests.
-  sort.Strings(node.Srcs)
-  sort.Strings(node.Hdrs)
+  var srcs, hdrs []string
+  for _, src := range node.Srcs {
+    srcs = append(srcs, src.FileRelativeTo(node.Label().Dir()))
+  }
+  for _, hdr := range node.Hdrs {
+    hdrs = append(hdrs, hdr.FileRelativeTo(node.Label().Dir()))
+  }
+  sort.Strings(srcs)
+  sort.Strings(hdrs)
   sort.Strings(deps)
 
-  return &buildContents{
-    label: node.Label(),
+  return []*buildContents{{
+    dir: node.Label().Dir(),
     library: &buildfile.Library{
       Name: node.Label().Name(),
-      Srcs: node.Srcs,
-      Hdrs: node.Hdrs,
+      Srcs: srcs,
+      Hdrs: hdrs,
       Deps: deps,
       Includes: node.Includes,
     },
-  }
+  }}
 }
 
-func groupContents(node *GroupNode, depGraph *DependencyGraph) *buildContents {
+func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents {
   var deps []string
   depNodes := depGraph.Dependencies(node.Label())
   for _, d := range depNodes {
@@ -127,24 +137,50 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) *buildContents {
 
   // Sort the srcs, hdrs, and deps so output has a deterministic order.
   // This is especially useful for tests.
-  sort.Strings(node.Srcs)
-  sort.Strings(node.Hdrs)
+  var srcs, hdrs []string
+  for _, src := range node.Srcs {
+    srcs = append(srcs, src.FileRelativeTo(node.Label().Dir()))
+  }
+  for _, hdr := range node.Hdrs {
+    hdrs = append(hdrs, hdr.FileRelativeTo(node.Label().Dir()))
+  }
+  sort.Strings(srcs)
+  sort.Strings(hdrs)
   sort.Strings(deps)
-  
-  return &buildContents{
-    label: node.Label(),
+  out := []*buildContents{{
+    dir: node.Label().Dir(),
     library: &buildfile.Library{
       Name: node.Label().Name(),
-      Srcs: node.Srcs,
-      Hdrs: node.Hdrs,
+      Srcs: srcs,
+      Hdrs: hdrs,
       Deps: deps,
     },
+  }}
+
+  // Add build contents for each file that needs exporting.
+  var labels []*bazel.Label
+  labels = append(labels, node.Srcs...)
+  labels = append(labels, node.Hdrs...)
+  exportFilesContents := make(map[string]*buildContents)
+  for _, l := range labels {
+    if exportFilesContents[l.Dir()] == nil {
+      exportFilesContents[l.Dir()] = &buildContents{
+        dir: l.Dir(),
+      }
+    }
+    exportFilesContents[l.Dir()].exportFiles = append(exportFilesContents[l.Dir()].exportFiles, l.Name())
   }
+
+  for _, c := range exportFilesContents {
+    out = append(out, c)
+  }
+
+  return out
 }
 
-func remapContents(node *RemapNode, depGraph *DependencyGraph) *buildContents {
-  return &buildContents{
-    label: node.Label(),
+func remapContents(node *RemapNode, depGraph *DependencyGraph) []*buildContents {
+  return []*buildContents{{
+    dir: node.Label().Dir(),
     labelSetting: node.LabelSetting,
-  }
+  }}
 }

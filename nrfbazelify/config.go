@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Michaelhobo/nrfbazel/internal/bazel"
 	"github.com/Michaelhobo/nrfbazel/internal/remap"
@@ -18,8 +19,8 @@ const (
 )
 
 type CCFiles struct {
-  Srcs []string
-  Hdrs []string
+  Srcs []*bazel.Label
+  Hdrs []*bazel.Label
 }
 
 func ReadConfig(sdkDir, workspaceDir string, verbose bool) (*Config, error) {
@@ -109,13 +110,13 @@ func readBazelifyRC(conf *Config) error {
 
     // Add files to source sets by label.
     // We make the srcs and hdrs relative to the label's directory.
-    srcs, err := makeRel(filepath.Join(conf.WorkspaceDir, label.Dir()), absSrcs)
+    srcs, err := makeLabels(conf.WorkspaceDir, absSrcs)
     if err != nil {
-      return fmt.Errorf("makeRel(%v): %v", absSrcs, err)
+      return fmt.Errorf("makeLabels(%v): %v", absSrcs, err)
     }
-    hdrs, err := makeRel(filepath.Join(conf.WorkspaceDir, label.Dir()), absHdrs)
+    hdrs, err := makeLabels(conf.WorkspaceDir, absHdrs)
     if err != nil {
-      return fmt.Errorf("makeRel(%v): %v", absHdrs, err)
+      return fmt.Errorf("makeLabels(%v): %v", absHdrs, err)
     }
     conf.SourceSets[label.String()] = &CCFiles{
       Srcs: srcs,
@@ -162,6 +163,24 @@ func makeRel(dir string, absPaths []string) ([]string, error) {
       relPath = ""
     }
     out = append(out, relPath)
+  }
+  return out, nil
+}
+
+// makeLabels turns the absolute paths into labels.
+func makeLabels(workspaceDir string, absPaths []string) ([]*bazel.Label, error) {
+  var out []*bazel.Label
+  for _, p := range absPaths {
+    if !strings.HasPrefix(p, workspaceDir) {
+      return nil, fmt.Errorf("%q must be in %q", p, workspaceDir)
+    }
+    name := filepath.Base(p)
+    dir := filepath.Dir(p)
+    label, err := bazel.NewLabel(dir, name, workspaceDir)
+    if err != nil {
+      return nil, fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", dir, name, workspaceDir, err)
+    }
+    out = append(out, label)
   }
   return out, nil
 }

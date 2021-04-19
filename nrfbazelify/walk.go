@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
+  includeMatcher = regexp.MustCompile("^\\s*#include\\s+\"(.+)\".*$")
 )
 
 func NewSDKWalker(conf *Config, graph *DependencyGraph) (*SDKWalker, error) {
@@ -110,11 +110,19 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
     return fmt.Errorf("bazel.NewLabel(%q, %q, %q): %v", dir, name, s.conf.WorkspaceDir, err)
   }
 
-  hdrs := []string{info.Name()}
-  var srcs []string
+  hdrLabel, err := bazel.NewLabel(dir, info.Name(), s.conf.WorkspaceDir)
+  if err != nil {
+    return fmt.Errorf("bazel.NewLabel(%q, %q): %v", dir, info.Name(), err)
+  }
+  hdrs := []*bazel.Label{hdrLabel}
+  var srcs []*bazel.Label
   srcFileName := fmt.Sprintf("%s.c", name)
   if _, err := os.Stat(filepath.Join(dir, srcFileName)); err == nil {
-    srcs = append(srcs, srcFileName)
+    srcLabel, err := bazel.NewLabel(dir, srcFileName, s.conf.WorkspaceDir)
+    if err != nil {
+      return fmt.Errorf("bazel.NewLabel(%q, %q): %v", dir, srcFileName, err)
+    }
+    srcs = append(srcs, srcLabel)
   }
 
   if err := s.graph.AddLibraryNode(label, srcs, hdrs, []string{"."}); err != nil {
@@ -150,7 +158,23 @@ func (s *SDKWalker) addRemapNodes() error {
     if err != nil {
       return fmt.Errorf("bazel.NewLabel(%q): %v", lib.Name, err)
     }
-    if err := s.graph.AddLibraryNode(label, lib.Srcs, lib.Hdrs, lib.Includes); err != nil {
+    dir := filepath.Join(s.conf.WorkspaceDir, label.Dir())
+    var srcs, hdrs []*bazel.Label
+    for _, src := range lib.Srcs {
+      srcLabel, err := bazel.NewLabel(dir, src, s.conf.WorkspaceDir)
+      if err != nil {
+        return fmt.Errorf("bazel.NewLabel(%q, %q): %v", dir, src, err)
+      }
+      srcs = append(srcs, srcLabel)
+    }
+    for _, hdr := range lib.Hdrs {
+      hdrLabel, err := bazel.NewLabel(dir, hdr, s.conf.WorkspaceDir)
+      if err != nil {
+        return fmt.Errorf("bazel.NewLabel(%q, %q): %v", dir, hdr, err)
+      }
+      hdrs = append(hdrs, hdrLabel)
+    }
+    if err := s.graph.AddLibraryNode(label, srcs, hdrs, lib.Includes); err != nil {
       return fmt.Errorf("AddLibraryNode(%q): %v", label, err)
     }
   }
@@ -214,18 +238,18 @@ func (s *SDKWalker) addDepsAsEdges() ([]*unresolvedDep, error) {
 }
 
 func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolvedDep, error) {
-  files := make(map[string]bool)
+  srcsHdrs := make(map[string]*bazel.Label)
   for _, src := range node.Srcs {
-    files[src] = true
+    srcsHdrs[src.String()] = src
   }
   for _, hdr := range node.Hdrs {
-    files[hdr] = true
+    srcsHdrs[hdr.String()] = hdr
   }
 
   // Read includes for srcs and hdrs
   deps := make(map[string]bool)
-  for file := range files {
-    filePath := filepath.Join(s.conf.WorkspaceDir, node.Label().Dir(), file)
+  for _, fileLabel := range srcsHdrs {
+    filePath := filepath.Join(s.conf.WorkspaceDir, fileLabel.Dir(), fileLabel.Name())
     includes, err := readIncludes(filePath)
     if err != nil {
       return nil, nil, fmt.Errorf("readIncludes(%q): %v", s.prettySDKPath(filePath), err)
@@ -235,11 +259,21 @@ func (s *SDKWalker) readDepsOnce(node *LibraryNode) ([]*resolvedDep, []*unresolv
     }
   }
 
-  // Filter the deps
+  // Filter the deps that should be ignored.
   for dep := range deps {
     if s.conf.IgnoreHeaders[dep] {
       delete(deps, dep)
-    } else if files[dep] {
+    }
+  }
+
+  // Filter the deps that match up with files in the srcs/hdrs of this node.
+  for dep := range deps {
+    dir := filepath.Join(s.conf.WorkspaceDir, node.Label().Dir())
+    depLabel, err := bazel.NewLabel(dir, dep, s.conf.WorkspaceDir)
+    if err != nil {
+      return nil, nil, fmt.Errorf("bazel.NewLabel(%q, %q): %v", dir, dep, err)
+    }
+    if srcsHdrs[depLabel.String()] != nil {
       delete(deps, dep)
     }
   }

@@ -100,7 +100,7 @@ func (d *DependencyGraph) IsFileOverridden(name string) bool {
 
 // AddLibraryNode adds a node that represents a cc_library rule.
 // If includeOwnDir is true, we add our current directory to the includes cc_library field.
-func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string, includes []string) error {
+func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []*bazel.Label, includes []string) error {
   // If an override node is taking up our label, delete it.
   if _, overrideExists := d.Node(label).(*OverrideNode); overrideExists {
     if err := d.deleteNode(label); err != nil {
@@ -114,8 +114,12 @@ func (d *DependencyGraph) AddLibraryNode(label *bazel.Label, srcs, hdrs []string
   }
 
   var indexFiles []string
-  indexFiles = append(indexFiles, srcs...)
-  indexFiles = append(indexFiles, hdrs...)
+  for _, src := range srcs {
+    indexFiles = append(indexFiles, src.Name())
+  }
+  for _, hdr := range hdrs {
+    indexFiles = append(indexFiles, hdr.Name())
+  }
   d.indexFiles(label, indexFiles)
 
   d.graph.AddNode(&LibraryNode{
@@ -297,22 +301,23 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     }
     node := d.graph.Node(nodeID).(Node)
 
-    var files []string
+    var srcsHdrs []*bazel.Label
     switch n := node.(type) {
     case *GroupNode:
-      files = append(files, n.Srcs...)
-      files = append(files, n.Hdrs...)
+      srcsHdrs = append(srcsHdrs, n.Srcs...)
+      srcsHdrs = append(srcsHdrs, n.Hdrs...)
     case *LibraryNode:
-      files = append(files, n.Srcs...)
-      files = append(files, n.Hdrs...)
+      srcsHdrs = append(srcsHdrs, n.Srcs...)
+      srcsHdrs = append(srcsHdrs, n.Hdrs...)
     default:
       return fmt.Errorf("node %q not supported", n.Label())
     }
-    for i := range files {
-      files[i] = filepath.Base(files[i])
+    var indexFiles []string
+    for _, f := range srcsHdrs {
+      indexFiles = append(indexFiles, f.Name())
     }
-    d.deindexFiles(node.Label(), files)
-    d.indexFiles(groupNode.Label(), files)
+    d.deindexFiles(node.Label(), indexFiles)
+    d.indexFiles(groupNode.Label(), indexFiles)
 
     if err := groupNode.Absorb(node); err != nil {
       return fmt.Errorf("groupNode.Absorb(%q): %v", node.Label(), err)
@@ -414,20 +419,23 @@ func (d *DependencyGraph) deleteNode(label *bazel.Label) error {
     return fmt.Errorf("%q not part of graph", label)
   }
   
-  node := d.graph.Node(nodeID)
-  var indexFiles []string
+  node := d.graph.Node(nodeID).(Node)
+  var srcsHdrs []*bazel.Label
   switch n := node.(type) {
-  case *LibraryNode:
-    indexFiles = append(indexFiles, n.Srcs...)
-    indexFiles = append(indexFiles, n.Hdrs...)
   case *GroupNode:
-    indexFiles = append(indexFiles, n.Srcs...)
-    indexFiles = append(indexFiles, n.Hdrs...)
+    srcsHdrs = append(srcsHdrs, n.Srcs...)
+    srcsHdrs = append(srcsHdrs, n.Hdrs...)
+  case *LibraryNode:
+    srcsHdrs = append(srcsHdrs, n.Srcs...)
+    srcsHdrs = append(srcsHdrs, n.Hdrs...)
   default:
-    log.Fatalf("unknown graph.Node type with node %v", node)
+    return fmt.Errorf("node %q not supported", n.Label())
   }
-
-  d.deindexFiles(label, indexFiles)
+  var indexFiles []string
+  for _, f := range srcsHdrs {
+    indexFiles = append(indexFiles, f.Name())
+  }
+  d.deindexFiles(node.Label(), indexFiles)
   d.graph.RemoveNode(nodeID)
 
   delete(d.labelToID, label.String())
