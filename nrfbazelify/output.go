@@ -163,6 +163,10 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents 
   labels = append(labels, node.Hdrs...)
   exportFilesContents := make(map[string]*buildContents)
   for _, l := range labels {
+    // We don't need to export files that are in the same directory.
+    if l.Dir() == node.Label().Dir() {
+      continue
+    }
     if exportFilesContents[l.Dir()] == nil {
       exportFilesContents[l.Dir()] = &buildContents{
         dir: l.Dir(),

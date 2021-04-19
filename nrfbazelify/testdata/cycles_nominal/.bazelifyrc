@@ -1,0 +1,5 @@
+named_groups: {
+  name: "abcd"
+  first_hdr: "//cycles_nominal/dir2:d.h"
+  last_hdr: "b.h"
+}

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "config.go",
         "graph.go",
+        "groups.go",
         "hint.go",
         "nodes.go",
         "nrfbazelify.go",

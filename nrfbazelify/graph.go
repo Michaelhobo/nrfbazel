@@ -1,17 +1,17 @@
 package nrfbazelify
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
+  "fmt"
+  "log"
+  "os"
+  "path/filepath"
 
-	"github.com/Michaelhobo/nrfbazel/internal/bazel"
-	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
-	"github.com/google/uuid"
-	"gonum.org/v1/gonum/graph"
-	"gonum.org/v1/gonum/graph/encoding/dot"
-	"gonum.org/v1/gonum/graph/simple"
+  "github.com/Michaelhobo/nrfbazel/internal/bazel"
+  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
+  "github.com/google/uuid"
+  "gonum.org/v1/gonum/graph"
+  "gonum.org/v1/gonum/graph/encoding/dot"
+  "gonum.org/v1/gonum/graph/simple"
 )
 
 // NewDependencyGraph creates a new DependencyGraph.
@@ -22,7 +22,6 @@ func NewDependencyGraph(sdkDir, workspaceDir, dotGraphProgressionDir string) *De
     dotGraphProgressionDir: dotGraphProgressionDir,
     dotGraphProgressionCount: 0,
     labelToID: make(map[string]int64),
-    idToLabel: make(map[int64]string),
     fileNameToLabel: make(map[string]*labelResolver),
     graph: simple.NewDirectedGraph(),
   }
@@ -34,7 +33,6 @@ type DependencyGraph struct {
   dotGraphProgressionCount int
   nextID int64
   labelToID map[string]int64 // label.String() -> node ID
-  idToLabel map[int64]string // node ID -> label.String()
   fileNameToLabel map[string]*labelResolver // file name (base only) -> indexed file
   graph *simple.DirectedGraph
 }
@@ -256,6 +254,45 @@ func (d *DependencyGraph) Dependencies(label *bazel.Label) []Node {
   return out
 }
 
+// ChangeLabel changes a node's label.
+func (d *DependencyGraph) ChangeLabel(before, after *bazel.Label) error {
+  node := d.Node(before)
+  if node == nil {
+    return fmt.Errorf("node %q not found", before)
+  }
+  if d.Node(after) != nil {
+    return fmt.Errorf("node %q already exists", after)
+  }
+  node.ChangeLabel(after)
+  var fileNames []string
+  switch n := node.(type) {
+  case *GroupNode:
+    for _, src := range n.Srcs {
+      fileNames = append(fileNames, src.Name())
+    }
+    for _, hdr := range n.Hdrs {
+      fileNames = append(fileNames, hdr.Name())
+    }
+  case *LibraryNode:
+    for _, src := range n.Srcs {
+      fileNames = append(fileNames, src.Name())
+    }
+    for _, hdr := range n.Hdrs {
+      fileNames = append(fileNames, hdr.Name())
+    }
+  }
+  d.deindexFiles(before, fileNames)
+  d.indexFiles(after, fileNames)
+
+  nodeID := d.labelToID[before.String()]
+  if nodeID == 0 {
+    log.Fatalf("labelToID[%q]=0, should have valid node ID", before)
+  }
+  delete(d.labelToID, before.String())
+  d.labelToID[after.String()] = nodeID
+  return nil
+}
+
 func (d *DependencyGraph) edgesFromTo(src, dst Node) ([]graph.Edge) {
   var edges []graph.Edge
   nodes := d.graph.From(src.ID())
@@ -301,6 +338,7 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     }
     node := d.graph.Node(nodeID).(Node)
 
+    // Reindex all nodes to point to the group node.
     var srcsHdrs []*bazel.Label
     switch n := node.(type) {
     case *GroupNode:
@@ -319,9 +357,12 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     d.deindexFiles(node.Label(), indexFiles)
     d.indexFiles(groupNode.Label(), indexFiles)
 
+    // Absorb the contents of all nodes into the group node.
     if err := groupNode.Absorb(node); err != nil {
       return fmt.Errorf("groupNode.Absorb(%q): %v", node.Label(), err)
     }
+
+    // Repoint all edges from and to the node to the group node.
     fromNodes := d.graph.From(nodeID)
     for fromNodes.Next() {
       d.graph.RemoveEdge(nodeID, fromNodes.Node().ID())
@@ -340,6 +381,7 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     }
   }
 
+  // Remove all other group nodes.
   for nodeID := range nodeIDs {
     if nodeID == groupNode.ID() {
       continue
@@ -352,6 +394,7 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     delete(nodeIDs, nodeID)
   }
 
+  // Add edges from all nodes to the group node.
   for nodeID := range nodeIDs {
     if nodeID == groupNode.ID() {
       continue
@@ -360,7 +403,6 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     if !isLibraryNode {
       return fmt.Errorf("node %q must be a library node", d.graph.Node(nodeID).(Node).Label())
     }
-    node.IsPointer = true
     d.graph.SetEdge(d.graph.NewEdge(node, groupNode))
   }
 
@@ -387,7 +429,6 @@ func (d *DependencyGraph) nodeID(label *bazel.Label) (int64, error) {
   // We increment nextID first to avoid using the zero value of int64.
   d.nextID++
   d.labelToID[label.String()] = d.nextID
-  d.idToLabel[d.nextID] = label.String()
   return d.nextID, nil
 }
 
@@ -439,7 +480,6 @@ func (d *DependencyGraph) deleteNode(label *bazel.Label) error {
   d.graph.RemoveNode(nodeID)
 
   delete(d.labelToID, label.String())
-  delete(d.idToLabel, nodeID)
   return nil
 }
 
