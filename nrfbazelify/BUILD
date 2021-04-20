@@ -31,7 +31,10 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["nrfbazelify_test.go"],
+    srcs = [
+        "config_test.go",
+        "nrfbazelify_test.go",
+    ],
     args = ["-test.v"],
     data = glob(["testdata/**"]),
     embed = [":go_default_library"],
