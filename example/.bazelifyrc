@@ -1,1 +1,6 @@
 remaps: "sdk_config.h"
+named_groups: {
+  name: "maingroup"
+  first_hdr: "a.h"
+  last_hdr: "c.h"
+}
