@@ -55,7 +55,7 @@ func (s *SDKWalker) addSourceSetFiles() error {
     if err != nil {
       return fmt.Errorf("bazel.ParseLabel(%q): %v", labelStr, err)
     }
-    if err := s.graph.AddLibraryNode(label, files.Srcs, files.Hdrs, []string{"."}); err != nil {
+    if err := s.graph.AddLibraryNode(label, files.Srcs, files.Hdrs, []string{label.Dir()}); err != nil {
       return fmt.Errorf("AddLibraryNode(%q): %v", label, err)
     }
   }
@@ -125,7 +125,7 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
     srcs = append(srcs, srcLabel)
   }
 
-  if err := s.graph.AddLibraryNode(label, srcs, hdrs, []string{"."}); err != nil {
+  if err := s.graph.AddLibraryNode(label, srcs, hdrs, []string{label.Dir()}); err != nil {
     return fmt.Errorf("graph.AddLibraryNode(%q, %v, %v): %v", label, srcs, hdrs, err)
   }
   return nil

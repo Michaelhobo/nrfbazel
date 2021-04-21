@@ -1,11 +1,11 @@
 package nrfbazelify
 
 import (
-  "fmt"
+	"fmt"
 
-  "github.com/Michaelhobo/nrfbazel/internal/bazel"
-  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
-  "gonum.org/v1/gonum/graph"
+	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"gonum.org/v1/gonum/graph"
 )
 
 type Node interface {
@@ -46,6 +46,7 @@ type GroupNode struct {
   id int64
   label *bazel.Label
   Srcs, Hdrs []*bazel.Label
+  Includes []string
 }
 
 func (g *GroupNode) ID() int64 {
@@ -71,11 +72,14 @@ func (g *GroupNode) Absorb(node Node) error {
   case *GroupNode:
     g.Srcs = append(g.Srcs, n.Srcs...)
     g.Hdrs = append(g.Hdrs, n.Hdrs...)
+    g.Includes = append(g.Includes, n.Includes...)
     n.Srcs = nil
     n.Hdrs = nil
+    n.Includes = nil
   case *LibraryNode:
     g.Srcs = append(g.Srcs, n.Srcs...)
     g.Hdrs = append(g.Hdrs, n.Hdrs...)
+    g.Includes = append(g.Includes, n.Includes...)
     n.Srcs = nil
     n.Hdrs = nil
     n.IsPointer = true
