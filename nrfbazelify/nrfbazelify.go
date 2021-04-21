@@ -14,7 +14,8 @@ import (
 
 var (
   dotGraphPath = flag.String("dot_graph_path", "", "The path to write the DOT graph. Omit to skip DOT graph output.")
-  dotGraphProgressionDir = flag.String("dot_graph_progression_dir", "", "The path to a directory to write the DOT graph progression. Omit to skip DOT graph progression output.")
+  dotGraphProgressionDir = flag.String("dot_graph_progression_dir", "", "The path to a directory to write the DOT graph progression. Omit to skip.")
+  namedGroupGraphsDir = flag.String("named_group_graphs_dir", "", "The path to a directory to write the DOT graphs of all named groups. Omit to skip.")
 )
 
 // GenerateBuildFiles generates BUILD files for an nRF5 SDK.
@@ -32,7 +33,7 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
   if err != nil {
     return fmt.Errorf("ReadBazelifyRC: %v", err)
   }
-  graph := NewDependencyGraph(sdkDir, workspaceDir, *dotGraphProgressionDir)
+  graph := NewDependencyGraph(conf, *dotGraphProgressionDir)
   if *dotGraphPath != "" {
     defer func(path string) {
       log.Printf("Saving dependency graph to %s", path)
@@ -66,8 +67,15 @@ func GenerateBuildFiles(workspaceDir, sdkDir string, verbose bool) error {
     return fmt.Errorf("removeStaleHintFile: %v", err)
   }
 
-  stats := graph.StatsSnapshot()
+  stats, err := NewGraphStats(conf, graph)
+  if err != nil {
+    return fmt.Errorf("NewGraphStats: %v", err)
+  }
   log.Print(stats.GenerateReport())
-
+  if *namedGroupGraphsDir != "" {
+    if err := stats.WriteNamedGroupGraphs(*namedGroupGraphsDir); err != nil {
+      return fmt.Errorf("WriteNamedGroupGraphs: %v", err)
+    }
+  }
   return nil
 }
