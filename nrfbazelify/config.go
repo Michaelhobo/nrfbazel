@@ -44,7 +44,7 @@ func readBazelifyRC(conf *Config) error {
   // per-SDK overrides in the same workspace.
   rcPath := filepath.Join(conf.SDKDir, rcFilename)
   if _, err := os.Stat(rcPath); err != nil {
-    return fmt.Errorf(".bazelifyrc not found: %v\nMake sure this is the right SDK path, or create an empty .bazelifyrc file at the root of the nrf52 SDK.", err)
+    return fmt.Errorf(".bazelifyrc not found: %v\nMake sure this is the right SDK path, or create an empty .bazelifyrc file at the root of the nrf52 SDK", err)
   }
   rcData, err := os.ReadFile(rcPath)
   if err != nil {

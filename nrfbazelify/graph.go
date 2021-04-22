@@ -15,10 +15,9 @@ import (
 )
 
 // NewDependencyGraph creates a new DependencyGraph.
-func NewDependencyGraph(sdkDir, workspaceDir, dotGraphProgressionDir string) *DependencyGraph {
+func NewDependencyGraph(conf *Config, dotGraphProgressionDir string) *DependencyGraph {
   return &DependencyGraph{
-    sdkDir: sdkDir,
-    workspaceDir: workspaceDir,
+    conf: conf,
     dotGraphProgressionDir: dotGraphProgressionDir,
     dotGraphProgressionCount: 0,
     labelToID: make(map[string]int64),
@@ -29,7 +28,8 @@ func NewDependencyGraph(sdkDir, workspaceDir, dotGraphProgressionDir string) *De
 
 // DependencyGraph is a Bazel dependency graph used to resolve conflicts and fix cyclic dependencies.
 type DependencyGraph struct {
-  sdkDir, workspaceDir, dotGraphProgressionDir string
+  conf *Config
+  dotGraphProgressionDir string
   dotGraphProgressionCount int
   nextID int64
   labelToID map[string]int64 // label.String() -> node ID
@@ -57,16 +57,6 @@ func (d *DependencyGraph) outputDOTGraphProgress() error {
   defer func() { d.dotGraphProgressionCount++ }()
   file := filepath.Join(d.dotGraphProgressionDir, fmt.Sprintf("%08d.dot", d.dotGraphProgressionCount))
   return d.OutputDOTGraph(file)
-}
-
-// StatsSnapshot generates GraphStats based on the current state of this graph.
-func (d *DependencyGraph) StatsSnapshot() *GraphStats {
-  nodes := d.graph.Nodes()
-  edges := d.graph.Edges()
-  return &GraphStats{
-    NodeCount: nodes.Len(),
-    EdgeCount: edges.Len(),
-  }
 }
 
 // Nodes returns a all current nodes.
@@ -198,7 +188,7 @@ func (d *DependencyGraph) AddOverrideNode(fileName string, label *bazel.Label) e
 
 // AddGroupNode adds an empty group node that represents a set of nodes.
 func (d *DependencyGraph) AddGroupNode() (*GroupNode, error) {
-  label, err := bazel.NewLabel(d.sdkDir, uuid.NewString(), d.workspaceDir)
+  label, err := bazel.NewLabel(d.conf.SDKDir, uuid.NewString(), d.conf.WorkspaceDir)
   if err != nil {
     return nil, fmt.Errorf("bazel.NewLabel: %v", err)
   }
