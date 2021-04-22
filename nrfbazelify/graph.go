@@ -331,6 +331,7 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
       return fmt.Errorf("AddGroupNode: %v", err)
     }
     groupNode = node
+    nodeIDs[groupNode.ID()] = true
   }
 
   for nodeID := range nodeIDs {
