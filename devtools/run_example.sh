@@ -5,6 +5,8 @@ bazel run //cmd/nrfbazelify -- \
   --workspace "${ROOT}" --sdk "${SDK}" \
   --full_graph --progression_graphs --named_group_graphs
 
+buildifier -r "${SDK}"
+
 DOT_OUT=${SDK}/.bazelify-out/dot
 PNG_OUT=${SDK}/.bazelify-out/png
 mkdir -p "${PNG_OUT}"
