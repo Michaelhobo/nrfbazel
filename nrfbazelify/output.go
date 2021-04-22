@@ -1,13 +1,13 @@
 package nrfbazelify
 
 import (
-  "fmt"
-  "os"
-  "path/filepath"
-  "sort"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 
-  "github.com/Michaelhobo/nrfbazel/internal/bazel"
-  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
+	"github.com/Michaelhobo/nrfbazel/internal/bazel"
+	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
 )
 
 const (
@@ -135,18 +135,28 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents 
     deps = append(deps, d.Label().RelativeTo(node.Label()))
   }
 
-  // Sort the srcs, hdrs, and deps so output has a deterministic order.
-  // This is especially useful for tests.
-  var srcs, hdrs []string
+  // Process srcs, hdrs, and includes
+  var srcs, hdrs, includes []string
   for _, src := range node.Srcs {
     srcs = append(srcs, src.FileRelativeTo(node.Label().Dir()))
   }
   for _, hdr := range node.Hdrs {
     hdrs = append(hdrs, hdr.FileRelativeTo(node.Label().Dir()))
   }
+  includesSet := make(map[string]bool)
+  for _, inc := range node.Includes {
+    includesSet[inc] = true
+  }
+  for inc := range includesSet {
+    includes = append(includes, inc)
+  }
+
+  // Sort the srcs, hdrs, includes, and deps so output has a deterministic order.
   sort.Strings(srcs)
   sort.Strings(hdrs)
   sort.Strings(deps)
+  sort.Strings(includes)
+ 
   out := []*buildContents{{
     dir: node.Label().Dir(),
     library: &buildfile.Library{
@@ -154,6 +164,7 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents 
       Srcs: srcs,
       Hdrs: hdrs,
       Deps: deps,
+      Includes: includes,
     },
   }}
 

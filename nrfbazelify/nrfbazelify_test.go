@@ -107,14 +107,14 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
         Name:     "a",
         Hdrs:     []string{"a.h"},
         Deps:     []string{":b"},
-        Includes: []string{"."},
+        Includes: []string{"nominal"},
       },
       {
         Name:     "b",
         Srcs:     []string{"b.c"},
         Hdrs:     []string{"b.h"},
         Deps:     []string{"//nominal/dir:c"},
-        Includes: []string{"."},
+        Includes: []string{"nominal"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
@@ -122,7 +122,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
         Name:     "c",
         Srcs:     []string{"c.c"},
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"nominal/dir"},
       },
     }, nil, nil),
   )
@@ -139,14 +139,14 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
         Name:     "uses_dir",
         Hdrs:     []string{"uses_dir.h"},
         Deps:     []string{"//name_matches_dir/dir"},
-        Includes: []string{"."},
+        Includes: []string{"name_matches_dir"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
       {
         Name:     "dir",
         Hdrs:     []string{"dir.h"},
-        Includes: []string{"."},
+        Includes: []string{"name_matches_dir/dir"},
       },
     }, nil, nil),
   )
@@ -164,7 +164,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
         Hdrs:     []string{"a.h"},
         Srcs: 		[]string{"a.c"},
         Deps:     []string{"//relative_includes/back_and_around:b"},
-        Includes: []string{"."},
+        Includes: []string{"relative_includes/up_one"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "back_and_around"), []*buildfile.Library{
@@ -172,7 +172,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
         Name:     "b",
         Hdrs:     []string{"b.h"},
         Srcs: 		[]string{"b.c"},
-        Includes: []string{"."},
+        Includes: []string{"relative_includes/back_and_around"},
       },
     }, nil, nil),
   )
@@ -192,7 +192,7 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"build_file_exists"},
       },
     }, nil, nil),
   )
@@ -230,7 +230,7 @@ func TestGenerateBuildFiles_WorkspaceMatchesSDKDir(t *testing.T) {
 }
 
 func TestGenerateBuildFiles_IncludeDoesNotExist(t *testing.T) {
-  workspaceDir, sdkDir := setup(t, "include_des_not_exist")
+  workspaceDir, sdkDir := setup(t, "include_does_not_exist")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err == nil {
     t.Errorf("GenerateBuildFiles(%s, %s): got nil error, want an error", workspaceDir, sdkDir)
   }
@@ -293,7 +293,7 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_target_overrides/sdkdir"},
         Deps: []string{
           "//bazelifyrc_target_overrides/outsidesdkdir:d",
           "//bazelifyrc_target_overrides/sdkdir/b",
@@ -303,21 +303,21 @@ func TestGenerateBuildFiles_BazelifyRCTargetOverrides(t *testing.T) {
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_target_overrides/sdkdir"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "b"), []*buildfile.Library{
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_target_overrides/sdkdir/b"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "c"), []*buildfile.Library{
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_target_overrides/sdkdir/c"},
       },
     }, nil, nil),
   )
@@ -333,7 +333,7 @@ func TestGenerateBuildFiles_BazelifyRCExistsButEmpty(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_exists_but_empty"},
       },
     }, nil, nil),
   )
@@ -349,18 +349,18 @@ func TestGenerateBuildFiles_StrangeInclude(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"strange_includes"},
         Deps:     []string{":b", ":d"},
       },
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"strange_includes"},
       },
       {
         Name:     "d",
         Hdrs:     []string{"d.h"},
-        Includes: []string{"."},
+        Includes: []string{"strange_includes"},
       },
     }, nil, nil),
   )
@@ -376,7 +376,7 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_excludes"},
         Deps: []string{
           "//bazelifyrc_excludes/included/e",
           "//bazelifyrc_excludes/included:d",
@@ -385,7 +385,7 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_excludes"},
         Deps:     []string{":a"},
       },
     }, nil, nil),
@@ -393,14 +393,14 @@ func TestGenerateBuildFiles_BazelifyRCExcludes(t *testing.T) {
       {
         Name:     "d",
         Hdrs:     []string{"d.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_excludes/included"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "included", "e"), []*buildfile.Library{
       {
         Name:     "e",
         Hdrs:     []string{"e.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_excludes/included/e"},
       },
     }, nil, nil),
   )
@@ -428,14 +428,14 @@ func TestGenerateBuildFiles_BazelifyRCIgnoreHeaders(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_ignore_headers"},
       },
     }, nil, nil),
   )
 }
 
 func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
-  workspaceDir, sdkDir := setup(t, filepath.Join("bazelifyrc_include_dirs"))
+  workspaceDir, sdkDir := setup(t, "bazelifyrc_include_dirs")
   if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
     t.Fatalf("GenerateBuildFiles(%s, %s): %v", workspaceDir, sdkDir, err)
   }
@@ -444,7 +444,7 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs"},
         Deps: []string{
           "//bazelifyrc_include_dirs/external/b",
           "//bazelifyrc_include_dirs/external:d",
@@ -454,42 +454,42 @@ func TestGenerateBuildFiles_BazelifyRCIncludeDirs(t *testing.T) {
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "external"), []*buildfile.Library{
       {
         Name:     "d",
         Hdrs:     []string{"d.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs/external"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "external", "b"), []*buildfile.Library{
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs/external/b"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "shouldskipthese"), []*buildfile.Library{
       {
         Name:     "d",
         Hdrs:     []string{"d.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs/shouldskipthese"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "shouldskipthese", "b"), []*buildfile.Library{
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs/shouldskipthese/b"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "shouldskipthese", "shouldalsoskipthese"), []*buildfile.Library{
       {
         Name:     "d",
         Hdrs:     []string{"d.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_include_dirs/shouldskipthese/shouldalsoskipthese"},
       },
     }, nil, nil),
   )
@@ -519,17 +519,17 @@ func TestGenerateBuildFiles_BazelifyRCRemap(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_remap"},
       },
       {
         Name:     "b",
         Hdrs:     []string{"b.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_remap"},
       },
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"bazelifyrc_remap"},
         Deps:     []string{
           ":a_remap",
           ":b_remap",
@@ -594,7 +594,7 @@ func TestGeneratedBuildFiles_SourceSets(t *testing.T) {
         Name:     "ab",
         Hdrs:     []string{"a.h", "b.h"},
         Srcs:     []string{"b.c"},
-        Includes: []string{"."},
+        Includes: []string{"source_sets"},
         Deps: []string{
           "//source_sets/dir:c",
         },
@@ -604,7 +604,7 @@ func TestGeneratedBuildFiles_SourceSets(t *testing.T) {
       {
         Name:     "c",
         Hdrs:     []string{"c.h"},
-        Includes: []string{"."},
+        Includes: []string{"source_sets/dir"},
       },
     }, nil, nil),
   )
@@ -629,6 +629,11 @@ func TestGenerateBuildFiles_CyclesNominal(t *testing.T) {
           "a.h",
           "b.h",
         },
+        Includes: []string{
+          "cycles_nominal",
+          "cycles_nominal/dir",
+          "cycles_nominal/dir2",
+        },
         Deps: []string{"//cycles_nominal/dir2:used_by_cyclic"},
       },
       {
@@ -640,7 +645,7 @@ func TestGenerateBuildFiles_CyclesNominal(t *testing.T) {
       {
         Name: "uses_cyclic",
         Hdrs: []string{"uses_cyclic.h"},
-        Includes: []string{"."},
+        Includes: []string{"cycles_nominal/dir"},
         Deps: []string{"//cycles_nominal:abcd"},
       },
       {
@@ -652,7 +657,7 @@ func TestGenerateBuildFiles_CyclesNominal(t *testing.T) {
       {
         Name: "used_by_cyclic",
         Hdrs: []string{"used_by_cyclic.h"},
-        Includes: []string{"."},
+        Includes: []string{"cycles_nominal/dir2"},
       },
       {
         Name: "d",
