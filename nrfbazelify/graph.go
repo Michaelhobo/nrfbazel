@@ -364,7 +364,7 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
       return fmt.Errorf("groupNode.Absorb(%q): %v", node.Label(), err)
     }
 
-    // Repoint all edges from and to the node to the group node.
+    // Repoint all edges from the node to the group node.
     fromNodes := d.graph.From(nodeID)
     for fromNodes.Next() {
       d.graph.RemoveEdge(nodeID, fromNodes.Node().ID())
@@ -372,14 +372,6 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
         continue
       }
       d.graph.SetEdge(d.graph.NewEdge(groupNode, fromNodes.Node()))
-    }
-    toNodes := d.graph.To(nodeID)
-    for toNodes.Next() {
-      d.graph.RemoveEdge(toNodes.Node().ID(), nodeID)
-      if toNodes.Node().ID() == groupNode.ID() {
-        continue
-      }
-      d.graph.SetEdge(d.graph.NewEdge(toNodes.Node(), groupNode))
     }
   }
 
