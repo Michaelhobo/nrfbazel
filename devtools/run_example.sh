@@ -9,6 +9,7 @@ buildifier -r "${SDK}"
 
 DOT_OUT=${SDK}/.bazelify-out/dot
 PNG_OUT=${SDK}/.bazelify-out/png
+rm -rf "${PNG_OUT}"
 mkdir -p "${PNG_OUT}"
 for f in ${DOT_OUT}/*/*.dot
 do

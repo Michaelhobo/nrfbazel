@@ -13,17 +13,19 @@ cc_library(
 )
 
 cc_library(
-    name = "c",
-    deps = [":maingroup"],
-)
-
-cc_library(
     name = "maingroup",
     hdrs = [
         "a.h",
         "b.h",
-        "c.h",
+        "//example/dir:c.h",
+        "//example/dir2:d.h",
     ],
+    includes = [
+        "example",
+        "example/dir",
+        "example/dir2",
+    ],
+    deps = ["//example/dir2:used_by_cyclic"],
 )
 
 cc_library(name = "nrfbazelify_empty_remap")
@@ -31,7 +33,7 @@ cc_library(name = "nrfbazelify_empty_remap")
 cc_library(
     name = "sdk_config",
     hdrs = ["sdk_config.h"],
-    includes = ["."],
+    includes = ["example"],
 )
 
 label_setting(
