@@ -1,19 +1,19 @@
 package nrfbazelify
 
 import (
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"testing"
+  "flag"
+  "fmt"
+  "os"
+  "path/filepath"
+  "regexp"
+  "strings"
+  "testing"
 
-	"github.com/Michaelhobo/nrfbazel/internal/buildfile"
-	"github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/testing/protocmp"
+  "github.com/Michaelhobo/nrfbazel/internal/buildfile"
+  "github.com/Michaelhobo/nrfbazel/proto/bazelifyrc"
+  "github.com/google/go-cmp/cmp"
+  "google.golang.org/protobuf/encoding/prototext"
+  "google.golang.org/protobuf/testing/protocmp"
 )
 
 var testDataDir = "testdata"
@@ -646,7 +646,7 @@ func TestGenerateBuildFiles_CyclesNominal(t *testing.T) {
         Name: "uses_cyclic",
         Hdrs: []string{"uses_cyclic.h"},
         Includes: []string{"cycles_nominal/dir"},
-        Deps: []string{"//cycles_nominal:abcd"},
+        Deps: []string{":c"},
       },
       {
         Name: "c",
