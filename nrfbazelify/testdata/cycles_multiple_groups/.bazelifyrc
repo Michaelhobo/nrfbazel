@@ -1,0 +1,5 @@
+named_groups: {
+  name: "big_group"
+  first_hdr: "//cycles_multiple_groups/group1:a.h"
+  last_hdr: "middle6.h"
+}

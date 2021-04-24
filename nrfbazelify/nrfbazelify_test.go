@@ -666,3 +666,88 @@ func TestGenerateBuildFiles_CyclesNominal(t *testing.T) {
     }, nil, []string{"d.h"}),
   )
 }
+
+func TestGenerateBuildFiles_CyclesMultipleGroups(t *testing.T) {
+  workspaceDir, sdkDir := setup(t, "cycles_multiple_groups")
+  if err := GenerateBuildFiles(workspaceDir, sdkDir, true); err != nil {
+    t.Fatalf("GenerateBuildFiles(%s, %s): %v", workspaceDir, sdkDir, err)
+  }
+  checkBuildFiles(t,
+    newBuildFile(sdkDir, []*buildfile.Library{
+      {
+        Name: "big_group",
+        Hdrs: []string{
+          "//cycles_multiple_groups/group1:a.h",
+          "//cycles_multiple_groups/group1:b.h",
+          "//cycles_multiple_groups/group1:c.h",
+          "//cycles_multiple_groups/group2:d.h",
+          "//cycles_multiple_groups/group2:e.h",
+          "//cycles_multiple_groups/group2:f.h",
+          "middle1.h",
+          "middle2.h",
+          "middle3.h",
+          "middle4.h",
+          "middle5.h",
+          "middle6.h",
+        },
+        Includes: []string{
+          "cycles_multiple_groups",
+          "cycles_multiple_groups/group1",
+          "cycles_multiple_groups/group2",
+        },
+      },
+      {
+        Name: "middle1",
+        Deps: []string{":big_group"},
+      },
+      {
+        Name: "middle2",
+        Deps: []string{":big_group"},
+      },
+      {
+        Name: "middle3",
+        Deps: []string{":big_group"},
+      },
+      {
+        Name: "middle4",
+        Deps: []string{":big_group"},
+      },
+      {
+        Name: "middle5",
+        Deps: []string{":big_group"},
+      },
+      {
+        Name: "middle6",
+        Deps: []string{":big_group"},
+      },
+    }, nil, nil),
+    newBuildFile(filepath.Join(sdkDir, "group1"), []*buildfile.Library{
+      {
+        Name: "a",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+      {
+        Name: "b",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+      {
+        Name: "c",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+    }, nil, []string{"a.h", "b.h", "c.h"}),
+    newBuildFile(filepath.Join(sdkDir, "group2"), []*buildfile.Library{
+      {
+        Name: "d",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+      {
+        Name: "e",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+      {
+        Name: "f",
+        Deps: []string{"//cycles_multiple_groups:big_group"},
+      },
+    }, nil, []string{"d.h", "e.h", "f.h"}),
+  )
+}
