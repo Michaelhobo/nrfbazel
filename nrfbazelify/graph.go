@@ -342,10 +342,12 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
 
     // Reindex all nodes to point to the group node.
     var srcsHdrs []*bazel.Label
+		repointInboundEdges := false
     switch n := node.(type) {
     case *GroupNode:
       srcsHdrs = append(srcsHdrs, n.Srcs...)
       srcsHdrs = append(srcsHdrs, n.Hdrs...)
+			repointInboundEdges = true
     case *LibraryNode:
       srcsHdrs = append(srcsHdrs, n.Srcs...)
       srcsHdrs = append(srcsHdrs, n.Hdrs...)
@@ -373,6 +375,17 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
       }
       d.graph.SetEdge(d.graph.NewEdge(groupNode, fromNodes.Node()))
     }
+
+		if repointInboundEdges {
+			toNodes := d.graph.To(nodeID)
+			for toNodes.Next() {
+				d.graph.RemoveEdge(toNodes.Node().ID(), nodeID)
+				if toNodes.Node().ID() == groupNode.ID() {
+					continue
+				}
+				d.graph.SetEdge(d.graph.NewEdge(toNodes.Node(), groupNode))
+			}
+		}
   }
 
   // Remove all other group nodes.
@@ -380,10 +393,16 @@ func (d *DependencyGraph) mergeCycle(cyclicEdges []graph.Edge) error {
     if nodeID == groupNode.ID() {
       continue
     }
-    _, isGroupNode := d.graph.Node(nodeID).(*GroupNode)
+    node, isGroupNode := d.graph.Node(nodeID).(*GroupNode)
     if !isGroupNode {
       continue
     }
+		if edgesFrom := d.graph.From(nodeID).Len(); edgesFrom != 0 {
+			return fmt.Errorf("deleting group node %q with %d edges still coming from it", node.Label(), edgesFrom)
+		}
+		if edgesTo := d.graph.To(nodeID).Len(); edgesTo != 0 {
+			return fmt.Errorf("deleting gorup node %q with %d edges still going to it", node.Label(), edgesTo)
+		}
     d.graph.RemoveNode(nodeID)
     delete(nodeIDs, nodeID)
   }
