@@ -164,24 +164,25 @@ func (d *DependencyGraph) AddRemapNode(label *bazel.Label, fileName string, labe
 }
 
 // AddOverrideNode adds a node that represents a target_override from bazelifyrc.
-func (d *DependencyGraph) AddOverrideNode(fileName string, label *bazel.Label) error {
+func (d *DependencyGraph) AddOverrideNode(fileName string, override *IncludeOverride) error {
   if d.fileNameToLabel[fileName] == nil {
     d.fileNameToLabel[fileName] = newLabelResolver()
   }
   resolver := d.fileNameToLabel[fileName]
   if resolver.override != nil {
-    return fmt.Errorf("override for %q already exists(%q), can't add second override %q", fileName, resolver.override, label)
+    return fmt.Errorf("override for %q already exists(%q), can't add second override %q", fileName, resolver.override, override.Label)
   }
-  resolver.override = label
+  resolver.override = override.Label
 
-  nodeID, err := d.nodeID(label)
+  nodeID, err := d.nodeID(override.Label)
   if err != nil {
     // If the label is already taken, just skip it.
     return nil
   }
   d.graph.AddNode(&OverrideNode{
     id: nodeID,
-    label: label,
+    label: override.Label,
+		Includes: override.IncludeDirs,
   })
   return nil
 }

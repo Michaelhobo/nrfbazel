@@ -53,9 +53,6 @@ func unresolvedDepsHint(conf *Config, unresolved []*unresolvedDep) []byte {
   if rc == nil {
     rc = &bazelifyrc.Configuration{}
   }
-  if rc.GetTargetOverrides() == nil {
-    rc.TargetOverrides = make(map[string]string)
-  }
   for _, dep := range unresolved {
     var includedBy []string
     for _, label := range dep.includedBy {
@@ -66,7 +63,10 @@ func unresolvedDepsHint(conf *Config, unresolved []*unresolvedDep) []byte {
       pleaseResolve = append(pleaseResolve, label.String())
     }
     possibilities := fmt.Sprintf("INCLUDED BY %s PLEASE RESOLVE: %s", strings.Join(includedBy, ","), strings.Join(pleaseResolve, "|"))
-    rc.TargetOverrides[dep.dstFileName] = possibilities
+    rc.IncludeOverrides = append(rc.IncludeOverrides, &bazelifyrc.IncludeOverride{
+			Include: dep.dstFileName,
+			Label: possibilities,
+		})
   }
   out, err := (&prototext.MarshalOptions{
     Multiline: true,

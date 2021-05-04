@@ -1,4 +1,4 @@
-target_overrides <
-  key: "overridden.h"
-  value: "//something"
->
+include_overrides {
+  include: "overridden.h"
+  label: "//something"
+}

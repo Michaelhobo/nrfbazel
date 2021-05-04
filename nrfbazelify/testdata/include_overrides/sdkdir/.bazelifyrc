@@ -1,0 +1,9 @@
+include_overrides <
+  include: "c.h"
+  label: "//include_overrides/sdkdir/c"
+>
+include_overrides {
+  include: "d.h"
+  label: "//include_overrides/outsidesdkdir:d"
+  include_dirs: "include_overrides/outsidesdkdir"
+}

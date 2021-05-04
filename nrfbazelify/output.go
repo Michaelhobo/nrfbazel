@@ -97,75 +97,16 @@ func extractBuildContents(node Node, depGraph *DependencyGraph) ([]*buildContent
 }
 
 func libraryContents(node *LibraryNode, depGraph *DependencyGraph) []*buildContents {
-  var deps []string
-  depNodes := depGraph.Dependencies(node.Label())
-  for _, d := range depNodes {
-    deps = append(deps, d.Label().RelativeTo(node.Label()))
-  }
-
-  // Sort the srcs, hdrs, and deps so output has a deterministic order.
-  // This is especially useful for tests.
-  var srcs, hdrs []string
-  for _, src := range node.Srcs {
-    srcs = append(srcs, src.FileRelativeTo(node.Label().Dir()))
-  }
-  for _, hdr := range node.Hdrs {
-    hdrs = append(hdrs, hdr.FileRelativeTo(node.Label().Dir()))
-  }
-  sort.Strings(srcs)
-  sort.Strings(hdrs)
-  sort.Strings(deps)
-
   return []*buildContents{{
     dir: node.Label().Dir(),
-    library: &buildfile.Library{
-      Name: node.Label().Name(),
-      Srcs: srcs,
-      Hdrs: hdrs,
-      Deps: deps,
-      Includes: node.Includes,
-    },
+    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, depGraph),
   }}
 }
 
 func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents {
-  var deps []string
-  depNodes := depGraph.Dependencies(node.Label())
-  for _, d := range depNodes {
-    deps = append(deps, d.Label().RelativeTo(node.Label()))
-  }
-
-  // Process srcs, hdrs, and includes
-  var srcs, hdrs, includes []string
-  for _, src := range node.Srcs {
-    srcs = append(srcs, src.FileRelativeTo(node.Label().Dir()))
-  }
-  for _, hdr := range node.Hdrs {
-    hdrs = append(hdrs, hdr.FileRelativeTo(node.Label().Dir()))
-  }
-  includesSet := make(map[string]bool)
-  for _, inc := range node.Includes {
-    includesSet[inc] = true
-  }
-  for inc := range includesSet {
-    includes = append(includes, inc)
-  }
-
-  // Sort the srcs, hdrs, includes, and deps so output has a deterministic order.
-  sort.Strings(srcs)
-  sort.Strings(hdrs)
-  sort.Strings(deps)
-  sort.Strings(includes)
- 
   out := []*buildContents{{
     dir: node.Label().Dir(),
-    library: &buildfile.Library{
-      Name: node.Label().Name(),
-      Srcs: srcs,
-      Hdrs: hdrs,
-      Deps: deps,
-      Includes: includes,
-    },
+    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, depGraph),
   }}
 
   // Add build contents for each file that needs exporting.
@@ -191,6 +132,87 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents 
   }
 
   return out
+}
+
+// makeLibrary creates a deterministic buildfile.Library by sorting all fields.
+func makeLibrary(label *bazel.Label, srcs, hdrs []*bazel.Label, depGraph *DependencyGraph) *buildfile.Library {
+  var deps []string
+  depNodes := depGraph.Dependencies(label)
+  for _, d := range depNodes {
+    deps = append(deps, d.Label().RelativeTo(label))
+  }
+
+  // Process srcs, hdrs, and copts
+  var outSrcs, outHdrs, copts []string
+  for _, src := range srcs {
+    outSrcs = append(outSrcs, src.FileRelativeTo(label.Dir()))
+  }
+  for _, hdr := range hdrs {
+    outHdrs = append(outHdrs, hdr.FileRelativeTo(label.Dir()))
+  }
+
+	// Add -I<include path> to copts for all dependencies.
+	copts = append(copts, includesAsCopts(label, hdrs, depGraph)...)
+
+  // Sort the srcs, hdrs, copts, and deps so output has a deterministic order.
+  sort.Strings(outSrcs)
+  sort.Strings(outHdrs)
+  sort.Strings(deps)
+  sort.Strings(copts)
+
+	return &buildfile.Library{
+		Name: label.Name(),
+		Srcs: outSrcs,
+		Hdrs: outHdrs,
+		Deps: deps,
+		Copts: copts,
+	}
+}
+
+// includesAsCopts finds all includes of all dependencies and headers of a node.
+// Dependencies get all their include dirs added.
+// If headers are in more than 1 directory, all header directories also get added.
+// All includes are returned in the form -I<include path>,
+// which is suitable for passing into a cc_library's copts field.
+func includesAsCopts(label *bazel.Label, hdrs []*bazel.Label, depGraph *DependencyGraph) []string {
+	// Prevent duplicates by using a set.
+	includesSet := make(map[string]bool)
+
+	// Add all dependencies' include directories to the includes.
+	deps := depGraph.Dependencies(label)
+	for _, dep := range deps {
+		var includes []string
+		switch d := dep.(type) {
+		case *LibraryNode:
+			includes = d.Includes
+		case *OverrideNode:
+			includes = d.Includes
+		default:
+			continue
+		}
+		for _, include := range includes {
+			includesSet[include] = true
+		}
+	}
+
+	// If headers are part of more than 1 directory,
+	// add all their directories to the includes.
+	hdrDirsSet := make(map[string]bool)
+	for _, hdr := range hdrs {
+		hdrDirsSet[hdr.Dir()] = true
+	}
+	if len(hdrDirsSet) > 1 {
+		for hdrDir := range hdrDirsSet {
+			includesSet[hdrDir] = true
+		}
+	}
+
+	// Turn them all into copts-compatible format.
+	var out []string
+	for include := range includesSet {
+		out = append(out, fmt.Sprintf("-I%s", include))
+	}
+	return out
 }
 
 func remapContents(node *RemapNode, depGraph *DependencyGraph) []*buildContents {
