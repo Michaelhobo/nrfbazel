@@ -26,6 +26,7 @@ type File struct {
   loads []*Load
   libs []*Library
   labelSettings []*LabelSetting
+	stringListSettings []*StringListSetting
   packageVisibility string
   exportFiles map[string]bool
 }
@@ -57,7 +58,7 @@ func (f *File) Generate() string {
       exportFiles = append(exportFiles, f)
     }
     sort.Strings(exportFiles)
-    out += fmt.Sprintf("exports_files([%s])\n", joinQuoted(exportFiles, ","))
+    out += fmt.Sprintf("exports_files(%s)\n", bazelStringList(exportFiles))
   }
 
   // Generate all libraries
@@ -76,17 +77,14 @@ func (f *File) Generate() string {
     out += labelSetting.Generate() + "\n"
   }
 
-  return out
-}
+	// Generate all string_list_settings.
+	sort.Slice(f.stringListSettings, func(i, j int) bool {
+		return f.stringListSettings[i].Name < f.stringListSettings[j].Name
+	})
+	for _, setting := range f.stringListSettings {
+		out += setting.Generate()
+	}
 
-func joinQuoted(all []string, sep string) string {
-  var out string
-  for i, val := range all {
-    if i > 0 {
-      out += sep
-    }
-    out += fmt.Sprintf("%q", val)
-  }
   return out
 }
 
@@ -110,6 +108,11 @@ func (f *File) AddLabelSetting(labelSetting *LabelSetting) {
   f.labelSettings = append(f.labelSettings, labelSetting)
 }
 
+// AddStringListSetting adds a string_list_setting to this file.
+func (f *File) AddStringListSetting(setting *StringListSetting) {
+	f.stringListSettings = append(f.stringListSettings, setting)
+}
+
 // Library contains the information needed to generate a cc_library rule.
 type Library struct {
   // name of the library rule
@@ -119,6 +122,12 @@ type Library struct {
   Deps     []string
   Includes []string
   Copts 	 []string
+
+	// A list of string defines and string list names.
+	//   cc_library(
+	//		 defines = defines_list0 + defines_list1 + [defines0, defines1]
+	//   )
+	Defines, DefinesLists  []string
 }
 
 // Generate generates the output format of this library.
@@ -133,6 +142,15 @@ func (l *Library) Generate() string {
   if l.Copts != nil {
     contents += fmt.Sprintf(", copts = %s", bazelStringList(l.Copts))
   }
+	if l.Defines != nil || l.DefinesLists != nil {
+		contents += fmt.Sprintf(", defines = %s", quoteAndAdd(l.DefinesLists))
+		if l.Defines != nil {
+			if l.DefinesLists != nil {
+				contents += " + "
+			}
+			contents += bazelStringList(l.Defines)
+		}
+	}
   if l.Includes != nil {
     contents += fmt.Sprintf(", includes = %s", bazelStringList(l.Includes))
   }
@@ -152,6 +170,17 @@ type LabelSetting struct {
 // Generate generates the output format of this label_setting.
 func (l *LabelSetting) Generate() string {
   return fmt.Sprintf("label_setting(name=%q, build_setting_default=%q)", l.Name, l.BuildSettingDefault)
+}
+
+// StringListSetting represents a string_list_setting rule.
+type StringListSetting struct {
+	Name string
+	BuildSettingDefault []string
+}
+
+// Generate generates the output format of this label_setting.
+func (s *StringListSetting) Generate() string {
+  return fmt.Sprintf("string_list_setting(name=%q, build_setting_default=%s)", s.Name, bazelStringList(s.BuildSettingDefault))
 }
 
 // Load represents a load() statement.
@@ -174,10 +203,10 @@ func (l *Load) Generate() string {
 // that can be used like this: fmt.Sprintf("srcs = %s", bazelStringList(in))
 func bazelStringList(in []string) string {
   first := true
-  var out string
+  out := "["
   for _, val := range in {
     if first {
-      out = fmt.Sprintf("[%q", val)
+      out += fmt.Sprintf("%q", val)
       first = false
       continue
     }
@@ -185,4 +214,20 @@ func bazelStringList(in []string) string {
   }
   out += "]"
   return out
+}
+
+// quoteAndAdd converts the input slice of strings into a list of quoted
+// strings separated by '+' signs.
+func quoteAndAdd(in []string) string {
+	first := true
+	var out string
+	for _, val := range in {
+		if first {
+			out += fmt.Sprintf("%q", val)
+			first = false
+			continue
+		}
+		out += fmt.Sprintf(" + %q", val)
+	}
+	return out
 }

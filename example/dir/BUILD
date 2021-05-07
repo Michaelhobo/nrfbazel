@@ -6,12 +6,14 @@ exports_files(["c.h"])
 
 cc_library(
     name = "c",
+    defines = "//example:nrf_defines",
     deps = ["//example:maingroup"],
 )
 
 cc_library(
     name = "uses_cyclic",
     hdrs = ["uses_cyclic.h"],
-    includes = ["example/dir"],
+    copts = ["-Iexample/dir"],
+    defines = "//example:nrf_defines",
     deps = [":c"],
 )

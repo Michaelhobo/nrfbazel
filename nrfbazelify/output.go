@@ -18,10 +18,31 @@ const (
 func OutputBuildFiles(conf *Config, depGraph *DependencyGraph) error {
   files := make(map[string]*buildfile.File)
 
+	// Add the nrf_defines setting, used for propagating GCC defines to all libs.
+	sdkRelDir, err := filepath.Rel(conf.WorkspaceDir, conf.SDKDir)
+	if err != nil {
+		return fmt.Errorf("filepath.Rel(%q, %q): %v", conf.WorkspaceDir, conf.SDKDir, err)
+	}
+	files[sdkRelDir] = buildfile.New(conf.SDKDir)
+
+	files[sdkRelDir].AddLoad(&buildfile.Load{
+		Source: "@bazel_skylib//rules:common_settings.bzl",
+		Symbols: []string{"string_list_setting"},
+	})
+
+	nrfDefinesName := "nrf_defines"
+	files[sdkRelDir].AddStringListSetting(&buildfile.StringListSetting{
+		Name: nrfDefinesName,
+	})
+	nrfDefinesLabel, err := bazel.NewLabel(conf.SDKDir, nrfDefinesName, conf.WorkspaceDir)
+	if err != nil {
+		return fmt.Errorf("bazel.NewLabel(%q, %q): %v", conf.SDKDir, nrfDefinesName, err)
+	}
+
   // Convert depGraph nodes into BUILD files.
   nodes := depGraph.Nodes()
   for _, node := range nodes {
-    contents, err := extractBuildContents(node, depGraph)
+    contents, err := extractBuildContents(node, depGraph, nrfDefinesLabel)
     if err != nil {
       return err
     }
@@ -79,12 +100,12 @@ type buildContents struct {
   exportFiles []string
 }
 
-func extractBuildContents(node Node, depGraph *DependencyGraph) ([]*buildContents, error) {
+func extractBuildContents(node Node, depGraph *DependencyGraph, nrfDefinesLabel *bazel.Label) ([]*buildContents, error) {
   switch n := node.(type) {
   case *LibraryNode:
-    return libraryContents(n, depGraph), nil
+    return libraryContents(n, depGraph, nrfDefinesLabel), nil
   case *GroupNode:
-    return groupContents(n, depGraph), nil
+    return groupContents(n, depGraph, nrfDefinesLabel), nil
   case *RemapNode:
     return remapContents(n, depGraph), nil
   case *OverrideNode:
@@ -96,17 +117,17 @@ func extractBuildContents(node Node, depGraph *DependencyGraph) ([]*buildContent
   }
 }
 
-func libraryContents(node *LibraryNode, depGraph *DependencyGraph) []*buildContents {
+func libraryContents(node *LibraryNode, depGraph *DependencyGraph, nrfDefinesLabel *bazel.Label) []*buildContents {
   return []*buildContents{{
     dir: node.Label().Dir(),
-    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, depGraph),
+    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, nrfDefinesLabel, depGraph),
   }}
 }
 
-func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents {
+func groupContents(node *GroupNode, depGraph *DependencyGraph, nrfDefinesLabel *bazel.Label) []*buildContents {
   out := []*buildContents{{
     dir: node.Label().Dir(),
-    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, depGraph),
+    library: makeLibrary(node.Label(), node.Srcs, node.Hdrs, nrfDefinesLabel, depGraph),
   }}
 
   // Add build contents for each file that needs exporting.
@@ -135,7 +156,7 @@ func groupContents(node *GroupNode, depGraph *DependencyGraph) []*buildContents 
 }
 
 // makeLibrary creates a deterministic buildfile.Library by sorting all fields.
-func makeLibrary(label *bazel.Label, srcs, hdrs []*bazel.Label, depGraph *DependencyGraph) *buildfile.Library {
+func makeLibrary(label *bazel.Label, srcs, hdrs []*bazel.Label, nrfDefinesLabel *bazel.Label, depGraph *DependencyGraph) *buildfile.Library {
   var deps []string
   depNodes := depGraph.Dependencies(label)
   for _, d := range depNodes {
@@ -166,6 +187,7 @@ func makeLibrary(label *bazel.Label, srcs, hdrs []*bazel.Label, depGraph *Depend
 		Hdrs: outHdrs,
 		Deps: deps,
 		Copts: copts,
+		DefinesLists: []string{nrfDefinesLabel.RelativeTo(label)},
 	}
 }
 

@@ -108,6 +108,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
         Hdrs:     []string{"a.h"},
         Deps:     []string{":b"},
         Copts: 		[]string{"-Inominal"},
+				DefinesLists: []string{":nrf_defines"},
       },
       {
         Name:     "b",
@@ -115,6 +116,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
         Hdrs:     []string{"b.h"},
         Deps:     []string{"//nominal/dir:c"},
         Copts: 		[]string{"-Inominal/dir"},
+				DefinesLists: []string{":nrf_defines"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
@@ -122,6 +124,7 @@ func TestGenerateBuildFiles_Nominal(t *testing.T) {
         Name:     "c",
         Srcs:     []string{"c.c"},
         Hdrs:     []string{"c.h"},
+				DefinesLists: []string{"//nominal:nrf_defines"},
       },
     }, nil, nil),
   )
@@ -139,12 +142,14 @@ func TestGenerateBuildFiles_NameMatchesDir(t *testing.T) {
         Hdrs:     []string{"uses_dir.h"},
         Deps:     []string{"//name_matches_dir/dir"},
         Copts: []string{"-Iname_matches_dir/dir"},
+				DefinesLists: []string{":nrf_defines"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "dir"), []*buildfile.Library{
       {
         Name:     "dir",
         Hdrs:     []string{"dir.h"},
+				DefinesLists: []string{"//name_matches_dir:nrf_defines"},
       },
     }, nil, nil),
   )
@@ -163,6 +168,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
         Srcs: 		[]string{"a.c"},
         Deps:     []string{"//relative_includes/back_and_around:b"},
         Copts: []string{"-Irelative_includes/back_and_around"},
+				DefinesLists: []string{"//relative_includes:nrf_defines"},
       },
     }, nil, nil),
     newBuildFile(filepath.Join(sdkDir, "back_and_around"), []*buildfile.Library{
@@ -170,6 +176,7 @@ func TestGenerateBuildFiles_RelativeIncludes(t *testing.T) {
         Name:     "b",
         Hdrs:     []string{"b.h"},
         Srcs: 		[]string{"b.c"},
+				DefinesLists: []string{"//relative_includes:nrf_defines"},
       },
     }, nil, nil),
   )
@@ -189,6 +196,7 @@ func TestGenerateBuildFiles_BuildFileExists(t *testing.T) {
       {
         Name:     "a",
         Hdrs:     []string{"a.h"},
+				DefinesLists: []string{":nrf_defines"},
       },
     }, nil, nil),
   )
