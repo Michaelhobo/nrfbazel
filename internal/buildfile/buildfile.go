@@ -118,6 +118,7 @@ type Library struct {
   Hdrs     []string
   Deps     []string
   Includes []string
+  Copts 	 []string
 }
 
 // Generate generates the output format of this library.
@@ -129,6 +130,9 @@ func (l *Library) Generate() string {
   if l.Hdrs != nil {
     contents += fmt.Sprintf(", hdrs = %s", bazelStringList(l.Hdrs))
   }
+  if l.Copts != nil {
+    contents += fmt.Sprintf(", copts = %s", bazelStringList(l.Copts))
+  }
   if l.Includes != nil {
     contents += fmt.Sprintf(", includes = %s", bazelStringList(l.Includes))
   }
@@ -137,7 +141,6 @@ func (l *Library) Generate() string {
   }
   contents += ")\n"
   return contents
-
 }
 
 // LabelSetting represents a label_setting rule.

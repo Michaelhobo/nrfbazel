@@ -132,8 +132,8 @@ func (s *SDKWalker) addFilesAsNodes(path string, info os.FileInfo, err error) er
 }
 
 func (s *SDKWalker) addOverrideNodes() error {
-  for name, label := range s.conf.IncludeOverrides {
-    if err := s.graph.AddOverrideNode(name, label); err != nil {
+  for name, override := range s.conf.IncludeOverrides {
+    if err := s.graph.AddOverrideNode(name, override); err != nil {
       return err
     }
   }

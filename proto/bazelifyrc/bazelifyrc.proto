@@ -6,9 +6,6 @@ option go_package = "github.com/Michaelhobo/nrfbazel/proto/bazelifyrc";
 
 // Configuration configures the behavior of the nrf52bazelify tool.
 message Configuration {
-  // Maps target name to a Bazel label override. e.g. we can set an override for
-  // a.h=//c/b:a
-  map<string, string> target_overrides = 1;
   // Specify paths relative to the SDK root that should be excluded.
   // Shell file name patterns are allowed, based on
   // https://golang.org/pkg/path/filepath/#Match. Excluded paths will not get
@@ -45,6 +42,32 @@ message Configuration {
   repeated SourceSet source_sets = 6;
   // Apply fixed names to groups created by cyclic dependencies.
   repeated NamedGroup named_groups = 7;
+  // Override includes with a specific label.
+  repeated IncludeOverride include_overrides = 8;
+
+  reserved 1;
+}
+
+// Use to override includes with a specific label.
+// This resolves multiple-possible-file conflicts or forwards includes to a rule of your choosing.
+// Example:
+//   include_overrides: {
+//     include: "wash.h"
+//     label: "//fruit:wash"
+//     include_dirs: "fruit"
+//   }
+// This overrides any cc_library rules with files containing `#include "wash.h"`,
+// and replaces the dependency with //fruit:wash.
+// Anything that depends on the generated cc_library will have "-Ifruit" added to its COPTS.
+message IncludeOverride {
+  // Anything that includes this file will depend on this override label instead.
+  string include = 1;
+  // This label will be used for the override.
+  string label = 2;
+  // These include dirs will be prepened with -I and added to COPTS for anything that depends on this override.
+  // These should be the directories relative to the workspace root.
+  // This is only necessary if the supplied label isn't part of the SDK (e.g. labels outside the SDK, or excluded files).
+  repeated string include_dirs = 3;
 }
 
 message SourceSet {

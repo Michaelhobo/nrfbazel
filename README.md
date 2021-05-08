@@ -101,18 +101,19 @@ based on Go's [filepath.Match](https://golang.org/pkg/path/filepath/#Match).
 **I recommend excluding the examples directory**
 
 If you want to always resolve a header using a target that's outside the SDK,
-you can manually override headers with target_overrides. You will probalby need
-this feature to make the sdk_config.h work.
+you can manually override headers with include_overrides. Anything that isn't
+in the SDK will need include_dirs specified if necessary.
 
 ```
-target_overrides <
-  key: "c.h"
-  value: "//path/to/target:c"
->
-target_overrides <
-  key: "d.h"
-  value: "//path/to/d:d"
->
+include_overrides {
+  include: "c.h"
+  label: "//path/to/target:c"
+}
+include_overrides {
+  include: "d.h"
+  label: "//outside_sdk/path/to/d:d"
+  include_dirs: "outside_sdk/path/to/d"
+}
 ```
 
 ### Outstanding Issues

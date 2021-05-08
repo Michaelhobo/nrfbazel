@@ -22,13 +22,19 @@ type CCFiles struct {
   Hdrs []*bazel.Label
 }
 
+type IncludeOverride struct {
+	Label *bazel.Label
+	// These IncludeDirs will be added to copts of any rules that depend on it.
+	IncludeDirs []string
+}
+
 func ReadConfig(sdkDir, workspaceDir string, verbose bool) (*Config, error) {
   conf := &Config{
     SDKDir: sdkDir,
     WorkspaceDir: workspaceDir,
     Verbose: verbose,
     IgnoreHeaders: make(map[string]bool),
-    IncludeOverrides: make(map[string]*bazel.Label),
+    IncludeOverrides: make(map[string]*IncludeOverride),
     SourceSetsByFile: make(map[string]*bazel.Label),
     SourceSets: make(map[string]*CCFiles),
     NamedGroups: make(map[string]map[string]string),
@@ -76,12 +82,15 @@ func readBazelifyRC(conf *Config) error {
     conf.IgnoreHeaders[ignore] = true
   }
 
-  for name, override := range rc.GetTargetOverrides() {
-    label, err := bazel.ParseLabel(override)
+  for _, override := range rc.GetIncludeOverrides() {
+    label, err := bazel.ParseLabel(override.GetLabel())
     if err != nil {
       return err
     }
-    conf.IncludeOverrides[name] = label
+    conf.IncludeOverrides[override.GetInclude()] = &IncludeOverride{
+			Label: label,
+			IncludeDirs: override.GetIncludeDirs(),
+		}
   }
 
   for _, sourceSet := range rc.GetSourceSets() {
@@ -143,7 +152,7 @@ type Config struct {
   Excludes []string // file paths to exclude, converted to absolute paths
   IncludeDirs []string // all paths converted to absolute paths
   IgnoreHeaders map[string]bool // header file name -> should ignore
-  IncludeOverrides map[string]*bazel.Label // file name -> override label
+  IncludeOverrides map[string]*IncludeOverride // file name -> override info
   SourceSetsByFile map[string]*bazel.Label // file path -> label of rule containing file
   SourceSets map[string]*CCFiles // label.String() -> files in source set
   NamedGroups map[string]map[string]string // first header -> last header -> name
