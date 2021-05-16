@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	remapBzlContents = template.Must(template.New("remapBzlContents").Parse(`
+  remapBzlContents = template.Must(template.New("remapBzlContents").Parse(`
 """ This allows performing remapping of library dependencies based on the
 nrf_cc_binary that includes the library.
 """
@@ -25,8 +25,9 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 def _remap_transition_impl(settings, attr):
   return {
+    "//command_line_option:copt": attr.copts,
 {{range .Data}}
-		"{{.Label}}": attr.{{.ShortName}},
+    "{{.Label}}": attr.{{.ShortName}},
 {{end}}
   }
 
@@ -34,6 +35,7 @@ _remap_transition = transition(
   implementation = _remap_transition_impl,
   inputs = [],
   outputs = [
+    "//command_line_option:copt",
 {{range .Data}}
     "{{.Label}}",
 {{end}}
@@ -63,6 +65,7 @@ def _remap_rule_impl(ctx):
 _remap_rule = rule(
   implementation = _remap_rule_impl,
   attrs = {
+    "copts": attr.string_list(),
 {{range .Data}}
     "{{.ShortName}}": attr.label(),
 {{end}}
@@ -78,20 +81,26 @@ _remap_rule = rule(
 # Convenience macro: this instantiates a transition_rule with the given
 # desired features, instantiates a cc_binary as a dependency of that rule,
 # and fills out the cc_binary with all other parameters passed to this macro.
-def nrf_cc_binary(name, remap = None, **kwargs):
+def nrf_cc_binary(name, remap = None, nrf_copts = None, nrf_defines = None, **kwargs):
   """A cc_binary with configurable targets.
 
   Args:
     name: string name of the binary.
     remap: dict of target names to rules.
+    nrf_copts: list of string to add to the copt line. These will propagate
+        to all files in the SDK.
+    nrf_defines: list of string to add to the copt line. These will propagate
+        to all files in the SDK.
     **kwargs: args passed to the underlying cc_binary rule
   """
   cc_binary_name = name + "_native_binary"
+  copts = nrf_copts + [ "-D{}".format(d) for d in nrf_defines ]
   _remap_rule(
     name = name,
     actual_binary = ":{}".format(cc_binary_name),
+    copts = copts,
 {{range .Data}}
-		{{.ShortName}} = remap.get("{{.Header}}", "{{.BuildSettingDefault}}"),
+    {{.ShortName}} = remap.get("{{.Header}}", "{{.BuildSettingDefault}}"),
 {{end}}
   )
   cc_binary(
@@ -110,7 +119,7 @@ func New(headers []string, sdkFromWorkspace string) (*Remaps, error) {
     libs = append(libs, &buildfile.Library{Name: emptyRemap})
   }
   labelSettings := make(map[string]*buildfile.LabelSetting)
-	remaps := &RemapsData{}
+  remaps := &RemapsData{}
   for _, header := range headers {
     if labelSettings[header] != nil {
       return nil, fmt.Errorf("duplicate remap for header file %q", header)
@@ -134,10 +143,10 @@ func New(headers []string, sdkFromWorkspace string) (*Remaps, error) {
       BuildSettingDefault: buildSettingDefault,
     })
   }
-	var bzlContents bytes.Buffer
+  var bzlContents bytes.Buffer
   if err := remapBzlContents.Execute(&bzlContents, remaps); err != nil {
-		return nil, fmt.Errorf("template execution failed: %v", err)
-	}
+    return nil, fmt.Errorf("template execution failed: %v", err)
+  }
 
   return &Remaps{
     libs: libs,
@@ -147,7 +156,7 @@ func New(headers []string, sdkFromWorkspace string) (*Remaps, error) {
 }
 
 type RemapsData struct {
-	Data []*Processed
+  Data []*Processed
 }
 
 type Processed struct {
