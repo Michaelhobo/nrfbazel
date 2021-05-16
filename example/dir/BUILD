@@ -12,6 +12,6 @@ cc_library(
 cc_library(
     name = "uses_cyclic",
     hdrs = ["uses_cyclic.h"],
-    includes = ["example/dir"],
+    copts = ["-Iexample/dir"],
     deps = [":c"],
 )

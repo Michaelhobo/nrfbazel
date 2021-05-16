@@ -20,10 +20,10 @@ cc_library(
         "//example/dir:c.h",
         "//example/dir2:d.h",
     ],
-    includes = [
-        "example",
-        "example/dir",
-        "example/dir2",
+    copts = [
+        "-Iexample",
+        "-Iexample/dir",
+        "-Iexample/dir2",
     ],
     deps = ["//example/dir2:used_by_cyclic"],
 )
@@ -33,7 +33,6 @@ cc_library(name = "nrfbazelify_empty_remap")
 cc_library(
     name = "sdk_config",
     hdrs = ["sdk_config.h"],
-    includes = ["example"],
 )
 
 label_setting(
